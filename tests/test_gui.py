@@ -404,3 +404,24 @@ def test_marked_slide_draws_word_items(op):
     kinds = [c.type(i) for i in c.find_all()]
     assert kinds.count("rectangle") == 1  # one highlight box
     assert sum(1 for i in c.find_all() if c.type(i) == "text") >= 6  # word by word
+
+
+def test_theme_switches_live(op):
+    op.set_theme("dark")
+    assert op.root.cget("background") == op.pal["bg"]
+    assert op.transcript.cget("background") == op.pal["surface"]
+    dark_bg = op.transcript.cget("background")
+    op.set_theme("light")
+    assert op.transcript.cget("background") != dark_bg
+    op._status("problem", error=True)
+    assert op.status_label.cget("foreground") == op.pal["error"]
+
+
+def test_theme_setting_forces_mode(op, monkeypatch):
+    monkeypatch.delenv("BIVERSE_THEME", raising=False)
+    op.settings["ui_theme"] = "dark"
+    op._check_theme()
+    assert op.theme_mode == "dark"
+    op.settings["ui_theme"] = "light"
+    op._check_theme()
+    assert op.theme_mode == "light"

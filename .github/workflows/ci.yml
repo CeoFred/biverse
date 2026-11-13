@@ -78,9 +78,11 @@ jobs:
       - run: python tools/build_bible_db.py && python tools/fetch_model.py --name kroko
       - name: Operator window at 1024x600 and 1920x1080, projector output at 1920x1080
         run: |
-          xvfb-run -a -s "-screen 0 1024x600x24"  python tools/screenshots.py operator shots/operator-1024x600.png
-          xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py operator shots/operator-1920x1080.png
+          BIVERSE_THEME=light xvfb-run -a -s "-screen 0 1024x600x24"  python tools/screenshots.py operator shots/operator-1024x600.png
+          BIVERSE_THEME=light xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py operator shots/operator-1920x1080.png
           xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py output shots/output-1920x1080.png
+          BIVERSE_THEME=dark xvfb-run -a -s "-screen 0 1024x600x24" python tools/screenshots.py operator shots/operator-dark-1024x600.png
+          BIVERSE_THEME=dark xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py operator shots/operator-dark-1920x1080.png
       - uses: actions/upload-artifact@v4
         with:
           name: screenshots

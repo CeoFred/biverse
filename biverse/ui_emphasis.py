@@ -30,6 +30,7 @@ class EmphasisDialog(object):
         self.win = tk.Toplevel(op.root)
         self.win.title(u"Emphasis — %s %d:%d (%s)" % (books.get(book).ref_name, chapter, verse, code))
         self.win.transient(op.root)
+        self.win.configure(background=op.pal["bg"])
         frame = ttk.Frame(self.win, padding=10)
         frame.pack(fill="both", expand=True)
         ttk.Label(frame, text="Select words, then choose a style. The projector updates straight away.").pack(
@@ -37,7 +38,10 @@ class EmphasisDialog(object):
         base = tkfont.nametofont("TkTextFont").actual()
         size = max(14, int(base.get("size", 12)) + 4)
         self.box = tk.Text(frame, wrap="word", height=6, width=56, font=(base["family"], size), padx=8, pady=8,
-                           relief="flat", undo=False, cursor="xterm")
+                           relief="flat", undo=False, cursor="xterm", background=op.pal["surface"],
+                           foreground=op.pal["text"], selectbackground=op.pal["select"],
+                           selectforeground=op.pal["text"], highlightthickness=1,
+                           highlightbackground=op.pal["border"])
         self.box.pack(fill="both", expand=True, pady=8)
         self.box.insert("1.0", self.text)
         self.box.configure(state="disabled")  # selectable, not editable
