@@ -57,15 +57,31 @@ class Detector(object):
         self.detections = []
         self._prev_words = {}
         self._ids = itertools.count(1)
+        self._position = None  # (book, chapter, time) of what the operator is showing
 
     def reset(self):
         self.detections = []
         self._prev_words = {}
 
-    def _last_absolute(self, now):
+    def set_position(self, book, chapter, now=None):
+        """The book and chapter now on screen (operator or voice navigation).
+
+        "verse 8" then means verse 8 of this chapter. Called from the UI thread;
+        a tuple assignment is atomic, so no lock is needed.
+        """
+        self._position = (book, chapter, self.clock() if now is None else now)
+
+    def _context(self, now):
+        """(book, chapter) for relative references: the newest of the last detection
+        and the on-screen position, if younger than ``relative_window``."""
+        best = None
         if self.detections and now - self.detections[-1].time <= self.relative_window:
-            return self.detections[-1]
-        return None
+            d = self.detections[-1]
+            best = (d.ref.book, d.ref.chapter, d.time)
+        pos = self._position
+        if pos is not None and now - pos[2] <= self.relative_window and (best is None or pos[2] >= best[2]):
+            best = pos
+        return best
 
     def feed_final(self, text, now=None, channel=FREE):
         """Process one final result. Returns ``[(NEW|UPDATE, detection), ...]``.
@@ -97,10 +113,10 @@ class Detector(object):
             if reference_only and (ref.book is None or not ref.explicit_verse):
                 continue
             if ref.book is None:
-                last = self._last_absolute(now)
-                if last is None:
+                ctx = self._context(now)
+                if ctx is None:
                     continue
-                resolved = ref.with_context(last.ref.book, last.ref.chapter, self.verse_count)
+                resolved = ref.with_context(ctx[0], ctx[1], self.verse_count)
                 if resolved is None:
                     continue
                 ref = resolved

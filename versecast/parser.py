@@ -33,6 +33,11 @@ RANGE_WORDS = frozenset(["to", "through", "thru", "till", "til", "until"])
 
 VerseCounter = Callable[[int, int], int]
 
+# Confidence of a reference whose book name was only a near-miss spelling.
+# Auto mode sends references below AUTO_MIN_CONFIDENCE to Preview, not live.
+FUZZY_CONFIDENCE = 0.6
+AUTO_MIN_CONFIDENCE = 0.65
+
 
 def default_verse_count(book, chapter):
     """Number of verses in ``book`` ``chapter`` (0 if it does not exist)."""
@@ -127,6 +132,19 @@ class _Tail(object):
         self.verse_kw = False
 
 
+# After a number these mean a quantity, not a verse: "my job 365 days a year".
+QUANTITY_WORDS = frozenset([
+    "day", "days", "week", "weeks", "month", "months", "year", "years", "hour", "hours", "minute", "minutes",
+    "second", "seconds", "time", "times", "people", "persons", "men", "women", "children", "members", "souls",
+    "percent", "naira", "dollars", "dollar", "pounds", "cedis", "shillings", "rand", "euros", "miles", "km",
+    "kilometres", "kilometers", "metres", "meters", "feet", "thousand", "million", "billion", "of", "per",
+])
+
+
+def _quantity_follows(tokens, k):
+    return k < len(tokens) and tokens[k] in QUANTITY_WORDS
+
+
 def _number_follows(tokens, k):
     """A number at ``k``, optionally after a verse word ("to verse 18")."""
     n = len(tokens)
@@ -163,6 +181,8 @@ def _parse_tail(tokens, j):
         elif t in VERSE_MISHEARD and k + 1 < n and _is_num(tokens[k + 1]):
             verse_kw = True
             k += 1
+        elif t == "a" and verse_kw and k + 1 < n and _is_num(tokens[k + 1]):
+            k += 1  # "verse a 5" (Parakeet's rendering of a hesitant "verse ... five")
         elif t == "and" and k + 1 < n and tokens[k + 1] in VERSE_WORDS:
             k += 1  # "and verse"
         elif t in FILLER:
@@ -270,13 +290,24 @@ def parse_tokens(tokens, mode="speech", strict=True, relative=True, verse_count=
 
     while i < n:
         hit = _books.match_book(tokens, i, typed=typed)
+        fuzzy = False
+        if hit is None and not typed and i + 1 < n and (tokens[i + 1] in CHAPTER_WORDS or _is_num(tokens[i + 1])):
+            fz = _books.fuzzy_match_book(tokens, i)
+            if fz is not None:
+                ftail = _parse_tail(tokens, i + fz[1])
+                # trust a near-miss name only with a full chapter-and-verse structure
+                if ftail is not None and ftail.verse is not None and (ftail.chapter_kw or ftail.verse_kw):
+                    hit = (fz[0], fz[1], False)
+                    fuzzy = True
         if hit is not None:
             book, length, strict_name = hit
             tail = _parse_tail(tokens, i + length)
             if tail is None:
                 i += length
                 continue
-            if strict and strict_name and not typed and not (tail.verse is not None or tail.chapter_kw):
+            merged = (tail.verse is None and tail.chapter is not None and tail.chapter >= 100
+                      and not _quantity_follows(tokens, tail.end))
+            if strict and strict_name and not typed and not (tail.verse is not None or tail.chapter_kw or merged):
                 i += length
                 continue
             resolved = _resolve(book.number, tail, verse_count, typed)
@@ -291,13 +322,18 @@ def parse_tokens(tokens, mode="speech", strict=True, relative=True, verse_count=
                 conf -= 0.3
             if fallback:
                 conf -= 0.1
+            if fuzzy:
+                conf = min(conf, FUZZY_CONFIDENCE)
             out.append(Reference(book.number, chapter, vs, ve, False, text_of(i, end),
                                  round(conf, 2), explicit, (i, end)))
             i = end
             continue
 
         tok = tokens[i]
-        if relative and tok in ("verse", "verses") and i + 1 < n and _is_num(tokens[i + 1]):
+        # Not right after a number: "<unknown book> chapter 3 verse 5" must not become
+        # verse 5 of whatever chapter is on screen.
+        if (relative and tok in ("verse", "verses") and i + 1 < n and _is_num(tokens[i + 1])
+                and not (i > 0 and _is_num(tokens[i - 1]))):
             vs = int(tokens[i + 1])
             ve = vs
             end = i + 2

@@ -180,7 +180,32 @@ def test_sixty_six_books():
     ("Philippians 413 says I can do all things", ["Philippians 4:13"]),
     ("Romans 828", ["Romans 8:28"]),
     ("First Corinthians 13:4 to 7", ["1 Corinthians 13:4-7"]),
-    ("my job 365 days a year", []),  # strict book: merged digits are not trusted
+    # merged chapter+verse digits, also for strict books ("Job 120" = Job 1:20)...
+    ("Job 120", ["Job 1:20"]),
+    ("job one hundred twenty", ["Job 1:20"]),
+    ("John 316", ["John 3:16"]),
+    ("Mark 1015", ["Mark 10:15"]),
+    # ...but not when a quantity follows
+    ("my job 365 days a year", []),
+    ("mark 120 people came", []),
+    ("acts 210 times", []),
+    # Parakeet writes "habakkuk two four" as "Habakkuk 2-4"; a dash is a range only after C:V
+    ("and then Habakkuk 2-4, and Haggai 2-9.", ["Habakkuk 2:4", "Haggai 2:9"]),
+    ("Romans 8 verses 28-30", ["Romans 8:28-30"]),
+    ("we met 2-3 times", []),
+    # near-miss spellings from neural recognisers, only with chapter-and-verse structure
+    ("Turn with me to Habakku chapter 3 verse 5.", ["Habakkuk 3:5"]),
+    ("Turn with me to Nebamiah 3 verse 5.", ["Nehemiah 3:5"]),
+    ("Turn with me to Zephynia chapter 3 verse 5.", ["Zephaniah 3:5"]),
+    ("Turn with me to Pileman chapter 1 verse 5.", ["Philemon 1:5"]),
+    ("Turn with me to Lannations chapter 3 verse 5.", ["Lamentations 3:5"]),
+    ("Turn with me to Psalm of Solomon chapter 3 verse 5.", ["Song of Solomon 3:5"]),
+    ("Turn with me to Judges chapter 3 verse a 5.", ["Judges 3:5"]),
+    # ...never from short or ordinary words, and no stray relative verse
+    ("Turn with me to Ruke chapter 3 verse 5.", []),
+    ("the nations chapter 3 verse 5", []),
+    ("my mother chapter 3 verse 5", []),
+    ("Habakku is a prophet", []),
     ("john three sixteen to ninety", ["John 3:16-36"]),  # range end clamped
     ("john three eighteen to sixteen", ["John 3:18"]),  # backwards range ignored
 ])
@@ -401,3 +426,11 @@ def test_reference_metadata():
     assert ref.confidence == 1.0 and ref.explicit_verse and not ref.relative
     (ref,) = parse("romans eight")
     assert not ref.explicit_verse and ref.verse_start == 1 and ref.confidence < 0.9
+
+
+def test_fuzzy_references_have_low_confidence():
+    from versecast.parser import AUTO_MIN_CONFIDENCE
+    (ref,) = parse("Turn with me to Habakku chapter 3 verse 5.")
+    assert ref.confidence < AUTO_MIN_CONFIDENCE
+    (ref,) = parse("turn to habakkuk chapter 3 verse 5")
+    assert ref.confidence >= AUTO_MIN_CONFIDENCE

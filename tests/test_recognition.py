@@ -209,8 +209,10 @@ def _all_engines(engine):
     return True
 
 
-def test_choose_parakeet_on_big_machine():
+def test_choose_both_on_big_machine():
     m, _ = recognizer.choose_model(_infos(), "auto", ram_gb=16, is64=True, available=_all_engines)
+    assert m.id == "both"
+    m, _ = recognizer.choose_model(_infos(), "parakeet", ram_gb=16, is64=True, available=_all_engines)
     assert m.id == "parakeet"
 
 
@@ -240,3 +242,43 @@ def test_resampler_lengths():
     total = sum(len(r([0.1] * 8820)) for _ in range(5))
     assert abs(total - 16000) <= 2
     assert recognizer.Resampler(16000)([1.0, 2.0]) == [1.0, 2.0]
+
+
+@pytest.mark.vosk
+def test_dual_engine_detects_once(clip):
+    """Kroko and Parakeet both hear the reference; the detector reports it once."""
+    kroko, parakeet = _model("kroko"), _model("parakeet")
+    info = recognizer.combined(kroko, parakeet)
+    events = queue.Queue()
+    service = recognizer.SpeechEngine(events, Detector())
+    service.set_engine(recognizer.create_engine(info), info)
+    service.start()
+    rate, pcm = clip
+    block = int(rate * 0.2) * 2
+    for i in range(0, len(pcm) + rate * 2, block):
+        service.audio_queue.put((rate, pcm[i:i + block] or b"\0" * block))
+    deadline = time.monotonic() + 30
+    detections, finals = [], []
+    while time.monotonic() < deadline:
+        try:
+            ev = events.get(timeout=1.5)
+        except queue.Empty:
+            if detections and finals:
+                break
+            continue
+        if ev[0] == "detect":
+            detections.append((ev[1], ev[2].ref.label()))
+        elif ev[0] == "final":
+            finals.append(ev[1])
+    service.stop()
+    assert [d for d in detections if d[0] == NEW] == [(NEW, "John 3:16")], detections
+    assert finals, "Parakeet's transcript line should appear"
+
+
+def test_combined_model_is_chosen_automatically_on_big_machines():
+    M = recognizer.ModelInfo
+    infos = [M("/m/kroko", "sherpa-online", "kroko", "Kroko"), M("/m/para", "sherpa-offline", "parakeet", "P", 6)]
+    m, _ = recognizer.choose_model(infos, "auto", ram_gb=16, is64=True, available=lambda e: True)
+    assert m.id == "both" and m.engine == "dual"
+    m, _ = recognizer.choose_model(infos, "auto", ram_gb=4, is64=True, available=lambda e: True)
+    assert m.id == "kroko"

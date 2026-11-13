@@ -109,6 +109,24 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   unpacked into a temporary folder and then moved into place, inside the settings folder.
 - **Kroko licence caveat:** the model card says CC-BY-SA, but the repository's LICENSE file is
   empty and gives no version. Ask Banafo to confirm the exact terms before wide distribution.
+- **Voice navigation (v1.2).** "next verse", "go back", "next/previous chapter" act on the live
+  slide in Auto mode and on Preview in Manual mode, matching how detections behave in each
+  mode. Explicit phrases are matched anywhere in an utterance. The bare words
+  "next"/"back"/"previous" count only when they make up an utterance of five words or fewer
+  after filler words ("okay next please"), because they are everyday words. With both models
+  running, the same command arriving from the other model within 3 s is ignored. "Move to
+  verse 8" is a relative reference rather than a command: the UI tells the detector which book
+  and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
+  newest of that and the last detection.
+- **Merged digits for strict books (v1.2).** "Job 120" → Job 1:20 and "John 316" → 3:16 at the
+  user's request, unless the next word is a quantity (days, years, people, times, naira…). The
+  known remaining risk: "my job 365" at the very end of a sentence becomes Job 36:5.
+- **A dash between two numbers is a range only after "C:V" or "verse(s) N".** Parakeet writes
+  "habakkuk two four" as "Habakkuk 2-4", which means chapter 2, verse 4.
+- **Kroko + Parakeet together (v1.2).** A virtual "both" model runs Kroko (live partials, fast
+  detections) and Parakeet (VAD phrases) on the same audio. Kroko's finals feed the detector on
+  their own channel and stay grey in the transcript until Parakeet's line replaces them.
+  "Automatic" prefers it when the pack is installed and the machine qualifies for Parakeet.
 - **Reference-only second recogniser (v1.1).** Real use showed the small model turning
   "genesis two eighteen" into "genesis to a team". A second Vosk recogniser with a grammar of
   book names, number words and reference keywords now runs on the same audio. On 84

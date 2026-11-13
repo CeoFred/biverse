@@ -163,3 +163,33 @@ def test_channels_keep_separate_context():
     d.feed_final("our text is romans chapter", now=0)
     d.feed_final("[unk] [unk]", now=0.1, channel=REFERENCE)
     assert labels(d.feed_final("eight verse twenty eight", now=1)) == [(NEW, "Romans 8:28")]
+
+
+# -- on-screen position for relative verses ---------------------------------------
+
+def test_relative_verse_uses_on_screen_position():
+    d = Detector()
+    d.feed_final("john three sixteen", now=0)
+    d.feed_final("blah blah blah blah blah blah blah blah blah blah blah blah", now=1)
+    d.set_position(43, 4, now=10)  # operator / voice moved to John 4
+    assert labels(d.feed_final("move to verse eight", now=12)) == [(NEW, "John 4:8")]
+
+
+def test_position_alone_is_enough_context():
+    d = Detector()
+    d.set_position(19, 23, now=0)
+    assert labels(d.feed_final("go to verse four", now=5)) == [(NEW, "Psalm 23:4")]
+
+
+def test_newer_detection_beats_older_position():
+    d = Detector()
+    d.set_position(19, 23, now=0)
+    d.feed_final("romans eight twenty eight", now=5)
+    d.feed_final("blah blah blah blah blah blah blah blah blah blah blah blah", now=6)
+    assert labels(d.feed_final("verse thirty", now=8)) == [(NEW, "Romans 8:30")]
+
+
+def test_old_position_expires():
+    d = Detector()
+    d.set_position(19, 23, now=0)
+    assert d.feed_final("verse four", now=400) == []

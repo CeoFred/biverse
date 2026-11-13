@@ -32,6 +32,7 @@ from array import array
 from typing import List, Optional, Tuple
 
 from . import paths, sysinfo
+from .commands import parse_command
 from .detector import REFERENCE, Detector
 
 log = logging.getLogger(__name__)
@@ -61,9 +62,16 @@ def sherpa():
 
 
 # Model ids in order of preference for "automatic"
-AUTO_ORDER = ("parakeet", "kroko", "vosk-small")
+AUTO_ORDER = ("both", "parakeet", "kroko", "vosk-small")
 PARAKEET_MIN_RAM_GB = 6.0
-LABELS = {"kroko": "Kroko (live)", "parakeet": "Parakeet (high accuracy)", "vosk-small": "Vosk small (classic)"}
+LABELS = {"kroko": "Kroko (live)", "parakeet": "Parakeet (high accuracy)", "vosk-small": "Vosk small (classic)",
+          "both": "Kroko live + Parakeet"}
+
+
+def combined(live: "ModelInfo", confirm: "ModelInfo") -> "ModelInfo":
+    """Virtual model: Kroko for live words, Parakeet to confirm at each pause."""
+    return ModelInfo(confirm.path, "dual", "both", LABELS["both"], max(live.min_ram_gb, confirm.min_ram_gb),
+                     {"parts": (live, confirm)})
 
 
 # ----------------------------------------------------------------- discovery
@@ -188,6 +196,8 @@ def choose_model(models: List[ModelInfo], preference: str = "auto", custom_path:
     by_id = {}  # type: Dict[str, ModelInfo]
     for m in usable:
         by_id.setdefault(m.id, m)
+    if "kroko" in by_id and "parakeet" in by_id and by_id["kroko"].engine == "sherpa-online":
+        by_id["both"] = combined(by_id["kroko"], by_id["parakeet"])
     if preference in by_id:
         return by_id[preference], "chosen in Settings"
     ram = sysinfo.total_ram_gb() if ram_gb is None else ram_gb
@@ -199,8 +209,9 @@ def choose_model(models: List[ModelInfo], preference: str = "auto", custom_path:
         m = by_id.get(mid)
         if m is None:
             continue
-        if mid == "parakeet" and not big_ok:
-            note += "Parakeet needs a 64-bit computer with %d GB+ RAM; " % PARAKEET_MIN_RAM_GB
+        if mid in ("parakeet", "both") and not big_ok:
+            if mid == "parakeet":
+                note += "Parakeet needs a 64-bit computer with %d GB+ RAM; " % PARAKEET_MIN_RAM_GB
             continue
         return m, note + "automatic"
     if usable:
@@ -395,7 +406,8 @@ class SherpaOnlineEngine(object):
         return out
 
     def finish(self) -> List[Tuple[str, str]]:
-        self.stream.accept_waveform(16000, [0.0] * 8000)
+        # 1.5 s of silence: the streaming model looks ahead before committing the last word
+        self.stream.accept_waveform(16000, [0.0] * 24000)
         self.stream.input_finished()
         while self.rec.is_ready(self.stream):
             self.rec.decode_stream(self.stream)
@@ -478,7 +490,41 @@ def _result_text(result) -> str:
     return (text or "").strip()
 
 
+class DualEngine(object):
+    """Kroko gives live words and fast detections; Parakeet re-hears each phrase at the
+    pause and confirms (or catches what Kroko missed). The detector merges both:
+    duplicates are dropped and a fuller reference updates the earlier one."""
+
+    def __init__(self, info: ModelInfo, num_threads: int = 2) -> None:
+        live, confirm = info.manifest["parts"]
+        self.info = info
+        self.live = SherpaOnlineEngine(live, num_threads)
+        self.confirm = SherpaOfflineEngine(confirm, num_threads)
+
+    @staticmethod
+    def _merge(live_events, confirm_events) -> List[Tuple[str, str]]:
+        out = []
+        for kind, text in live_events:
+            if kind == "partial":
+                out.append(("partial", text))
+            elif kind == "final":
+                out.append(("partial", text))      # stays grey until Parakeet's version arrives
+                out.append(("final_live", text))
+        for kind, text in confirm_events:
+            if kind == "final":
+                out.append(("final", text))
+        return out
+
+    def accept(self, rate: int, pcm: bytes) -> List[Tuple[str, str]]:
+        return self._merge(self.live.accept(rate, pcm), self.confirm.accept(rate, pcm))
+
+    def finish(self) -> List[Tuple[str, str]]:
+        return self._merge(self.live.finish(), self.confirm.finish())
+
+
 def create_engine(info: ModelInfo, num_threads: int = 2):
+    if info.engine == "dual":
+        return DualEngine(info, num_threads)
     if info.engine == "vosk":
         return VoskEngine(info)
     if info.engine == "sherpa-online":
@@ -541,6 +587,7 @@ class SpeechEngine(object):
         self._stop = threading.Event()
         self._load_token = 0
         self._use_reference = True
+        self.commands = True  # spoken "next verse", "go back"...
 
     @property
     def model_path(self) -> Optional[str]:
@@ -663,13 +710,24 @@ class SpeechEngine(object):
         if kind == "partial":
             self.events.put(("partial", text))
             return
-        if kind == "final_ref":
+        if kind == "final_ref":  # Vosk reference listener: detections only
             events = self.detector.feed_final(text, channel=REFERENCE)
+        elif kind == "final_live":  # Kroko inside the dual engine: not shown, Parakeet's line is
+            events = self.detector.feed_final(text, channel="live")
+            self._command(text, "live")
         else:
             self.events.put(("final", text))
             events = self.detector.feed_final(text)
+            self._command(text, "main")
         try:
             for k, det in events:
                 self.events.put(("detect", k, det))
         except Exception:
             log.exception("detector error on %r", text)
+
+    def _command(self, text: str, channel: str) -> None:
+        if not self.commands:
+            return
+        cmd = parse_command(text)
+        if cmd is not None:
+            self.events.put(("command", cmd, channel, time.monotonic(), text))

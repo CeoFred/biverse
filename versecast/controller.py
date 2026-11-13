@@ -91,6 +91,22 @@ def step(bible: Bible, sel: Selection, delta: int) -> Optional[Selection]:
     return Selection(b, c, v, v)
 
 
+def chapter_step(bible: Bible, sel: Selection, delta: int) -> Optional[Selection]:
+    """Verse 1 of the next (+1) or previous (-1) chapter, crossing books; None at the ends."""
+    b, c = sel.book, sel.chapter + delta
+    if c < 1:
+        b -= 1
+        if b < 1:
+            return None
+        c = bible.chapter_count(b)
+    elif c > bible.chapter_count(b):
+        b += 1
+        if b > 66:
+            return None
+        c = 1
+    return Selection(b, c, 1, 1)
+
+
 class SlideBuilder(object):
     """Turns selections into slides in the current translation."""
 
