@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from versecast.commands import CHAPTER, GOTO, RESUME, STEP, STOP, VERSE, Intent, parse_intent
+from biverse.commands import CHAPTER, GOTO, RESUME, STEP, STOP, VERSE, Intent, parse_intent
 
 NEXT = Intent(STEP, VERSE, 1)
 PREV = Intent(STEP, VERSE, -1)

@@ -47,7 +47,7 @@ jobs:
       - name: Python packages
         run: pip install -r ${{ matrix.reqs }}
       - name: Byte-compile everything
-        run: python -m compileall -q versecast tools tests packaging/launcher.py
+        run: python -m compileall -q biverse tools tests packaging/launcher.py
       - uses: actions/cache@v4
         with:
           path: data/cache
@@ -59,7 +59,7 @@ jobs:
       - name: Tests
         run: xvfb-run -a python -m pytest -q -rs
       - name: Self-test from source
-        run: xvfb-run -a python -m versecast --self-test
+        run: xvfb-run -a python -m biverse --self-test
 
   screenshots:
     runs-on: ubuntu-latest
@@ -110,4 +110,4 @@ jobs:
       - name: Build the model pack and install it like a user would
         run: |
           python tools/fetch_model.py --name parakeet --pack pack.zip
-          python -c "from versecast import modelpack; print(modelpack.install('pack.zip', 'installed').label)"
+          python -c "from biverse import modelpack; print(modelpack.install('pack.zip', 'installed').label)"

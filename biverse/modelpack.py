@@ -47,7 +47,7 @@ def inspect(zip_path: str) -> str:
                 tops.add(parts[0])
         manifests = [n for n in names if n.count("/") == 1 and n.endswith("/biverse-model.json")]
         if len(manifests) != 1 or len(tops) != 1:
-            raise PackError("this is not a BiVerse speech model pack (expected one model folder with "
+            raise PackError("this is not a Biverse speech model pack (expected one model folder with "
                             "biverse-model.json)")
         try:
             manifest = json.loads(zf.read(manifests[0]).decode("utf-8"))

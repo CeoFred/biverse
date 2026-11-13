@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from versecast.detector import NEW, UPDATE, Detector
+from biverse.detector import NEW, UPDATE, Detector
 
 
 def labels(events):
@@ -132,14 +132,14 @@ def test_empty_text():
 # -- reference-only recogniser channel ------------------------------------------------
 
 def test_reference_channel_accepts_chapter_and_verse():
-    from versecast.detector import REFERENCE
+    from biverse.detector import REFERENCE
     d = Detector()
     events = d.feed_final("[unk] genesys two eighteen [unk]", now=0, channel=REFERENCE)
     assert labels(events) == [(NEW, "Genesis 2:18")]
 
 
 def test_reference_channel_rejects_chapter_only_and_relative():
-    from versecast.detector import REFERENCE
+    from biverse.detector import REFERENCE
     d = Detector()
     assert d.feed_final("[unk] micah three", now=0, channel=REFERENCE) == []
     assert d.feed_final("[unk] mathew thirteen [unk]", now=1, channel=REFERENCE) == []
@@ -148,7 +148,7 @@ def test_reference_channel_rejects_chapter_only_and_relative():
 
 
 def test_both_channels_dedupe_and_extend():
-    from versecast.detector import REFERENCE
+    from biverse.detector import REFERENCE
     d = Detector()
     assert labels(d.feed_final("genesis to a team", now=0)) == []
     assert labels(d.feed_final("genesys two eighteen", now=0.1, channel=REFERENCE)) == [(NEW, "Genesis 2:18")]
@@ -158,7 +158,7 @@ def test_both_channels_dedupe_and_extend():
 
 
 def test_channels_keep_separate_context():
-    from versecast.detector import REFERENCE
+    from biverse.detector import REFERENCE
     d = Detector()
     d.feed_final("our text is romans chapter", now=0)
     d.feed_final("[unk] [unk]", now=0.1, channel=REFERENCE)

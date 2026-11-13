@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for BiVerse. Works with PyInstaller 5.13.2 (Python 3.8
+# PyInstaller spec for Biverse. Works with PyInstaller 5.13.2 (Python 3.8
 # legacy builds) and 6.x. One-dir build.
 #
-#   pyinstaller --noconfirm --clean packaging/versecast.spec
+#   pyinstaller --noconfirm --clean packaging/biverse.spec
 #
 # Environment:
 #   BIVERSE_MACOS_MIN       LSMinimumSystemVersion (default 10.13)
@@ -21,10 +21,10 @@ from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 ROOT = os.path.abspath(os.path.join(SPECPATH, os.pardir))  # noqa: F821 (SPECPATH is provided by PyInstaller)
 sys.path.insert(0, ROOT)
 
-with open(os.path.join(ROOT, "versecast", "__init__.py"), encoding="utf-8") as f:
+with open(os.path.join(ROOT, "biverse", "__init__.py"), encoding="utf-8") as f:
     VERSION = re.search(r'__version__ = "([^"]+)"', f.read()).group(1)
 PI_MAJOR = int(PyInstaller.__version__.split(".")[0])
-APP = "BiVerse"
+APP = "Biverse"
 # Speech models to bundle, by manifest id (tools/fetch_model.py installs them):
 # every build bundles Kroko; Windows legacy builds add the classic Vosk model as
 # a fallback for Windows 7, where ONNX Runtime may not load.
@@ -115,13 +115,13 @@ if sys.platform == "win32":
   ffi=FixedFileInfo(filevers=(%(n)s), prodvers=(%(n)s), mask=0x3f, flags=0x0, OS=0x40004,
                     fileType=0x1, subtype=0x0, date=(0, 0)),
   kids=[StringFileInfo([StringTable(u'040904B0', [
-      StringStruct(u'CompanyName', u'BiVerse'),
-      StringStruct(u'FileDescription', u'BiVerse - live Bible verse projection'),
+      StringStruct(u'CompanyName', u'Biverse'),
+      StringStruct(u'FileDescription', u'Biverse - live Bible verse projection'),
       StringStruct(u'FileVersion', u'%(v)s'),
-      StringStruct(u'InternalName', u'BiVerse'),
+      StringStruct(u'InternalName', u'Biverse'),
       StringStruct(u'LegalCopyright', u'MIT licence'),
-      StringStruct(u'OriginalFilename', u'BiVerse.exe'),
-      StringStruct(u'ProductName', u'BiVerse'),
+      StringStruct(u'OriginalFilename', u'Biverse.exe'),
+      StringStruct(u'ProductName', u'Biverse'),
       StringStruct(u'ProductVersion', u'%(v)s')])]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])]
 )
@@ -175,17 +175,17 @@ if sys.platform == "darwin":
         coll,
         name=APP + ".app",
         icon=os.path.join(ROOT, "packaging", "icons", "biverse.icns"),
-        bundle_identifier="org.versecast.app",
+        bundle_identifier="org.biverse.app",
         version=VERSION,
         info_plist={
             "CFBundleName": APP,
             "CFBundleDisplayName": APP,
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
-            "CFBundleIdentifier": "org.versecast.app",
+            "CFBundleIdentifier": "org.biverse.app",
             "LSMinimumSystemVersion": os.environ.get("BIVERSE_MACOS_MIN", "10.13"),
             "NSHighResolutionCapable": True,
-            "NSMicrophoneUsageDescription": "BiVerse listens to the preacher to recognise Bible references. "
+            "NSMicrophoneUsageDescription": "Biverse listens to the preacher to recognise Bible references. "
                                             "Audio never leaves this computer.",
             "NSRequiresAquaSystemAppearance": False,
             "LSApplicationCategoryType": "public.app-category.productivity",

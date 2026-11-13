@@ -1,6 +1,6 @@
-# BiVerse
+# Biverse
 
-**Free, offline Bible-verse projection driven by live speech.** BiVerse listens to the
+**Free, offline Bible-verse projection driven by live speech.** Biverse listens to the
 preacher, recognises spoken Bible references ("John chapter three verse sixteen") and shows
 the verse full-screen on the projector or TV you choose. Everything runs on the church
 computer. There is no internet connection, account, cloud service or telemetry.
@@ -38,12 +38,12 @@ Get the zip for your computer from the
 
 | File | For |
 |---|---|
-| `BiVerse-<version>-windows-x64.zip` | Windows 10/11, 64-bit |
-| `BiVerse-<version>-windows-legacy-x64.zip` | Windows 7 SP1 / 8 / 8.1 (and 10/11), 64-bit |
-| `BiVerse-<version>-windows-legacy-x86.zip` | Windows 7+ 32-bit |
-| `BiVerse-<version>-macos-arm.zip` | Apple Silicon Macs, macOS 11+ |
-| `BiVerse-<version>-macos-intel.zip` | Intel Macs, macOS 10.15+ (also runs on Apple Silicon via Rosetta) |
-| `BiVerse-model-pack-parakeet-<version>.zip` | Optional high-accuracy speech model (64-bit, ~6 GB RAM) |
+| `Biverse-<version>-windows-x64.zip` | Windows 10/11, 64-bit |
+| `Biverse-<version>-windows-legacy-x64.zip` | Windows 7 SP1 / 8 / 8.1 (and 10/11), 64-bit |
+| `Biverse-<version>-windows-legacy-x86.zip` | Windows 7+ 32-bit |
+| `Biverse-<version>-macos-arm.zip` | Apple Silicon Macs, macOS 11+ |
+| `Biverse-<version>-macos-intel.zip` | Intel Macs, macOS 10.15+ (also runs on Apple Silicon via Rosetta) |
+| `Biverse-model-pack-parakeet-<version>.zip` | Optional high-accuracy speech model (64-bit, ~6 GB RAM) |
 
 `SHA256SUMS.txt` lists the checksums. The [User Guide](USER_GUIDE.md) covers installation,
 connecting the projector, audio sources and troubleshooting, for non-technical volunteers.
@@ -66,7 +66,7 @@ python tools/fetch_model.py --name kroko,vosk-small   # speech models -> models/
 ```
 
 ```bash
-python -m versecast                      # run the app
+python -m biverse                      # run the app
 ```
 
 ```bash
@@ -74,16 +74,16 @@ python -m pytest -q                      # tests (GUI tests need a display; use 
 ```
 
 ```bash
-python -m versecast --self-test          # JSON health report
+python -m biverse --self-test          # JSON health report
 ```
 
 Package it (on the target OS):
 
 ```bash
-pyinstaller --noconfirm --clean packaging/versecast.spec
+pyinstaller --noconfirm --clean packaging/biverse.spec
 ```
 
-This produces `dist/BiVerse/` on Windows and `dist/BiVerse.app` on macOS. CI builds all five
+This produces `dist/Biverse/` on Windows and `dist/Biverse.app` on macOS. CI builds all five
 targets (see `.github/workflows/build.yml`). Pushing a `v*` tag creates a GitHub Release with
 the zips and checksums.
 
@@ -106,19 +106,19 @@ loading, opening an audio device and recognition all happen off the UI thread.
 
 | Module | Role |
 |---|---|
-| `versecast/books.py` | 66 books: spoken names, mis-transcriptions, typed abbreviations, strict flag |
-| `versecast/numbers.py` | Text normalisation and number words to digits |
-| `versecast/parser.py` | Text to `Reference` (speech and typed modes), validation, Psalm 119 fallback |
-| `versecast/detector.py` | Context across pauses, de-duplication, range extension, relative verses |
-| `versecast/bible.py` | SQLite access: verses, ranges, next/prev, phrase search |
-| `versecast/audio.py` | Device listing, capture, downmix, level, async open, watchdog |
-| `versecast/recognizer.py` | Model discovery and choice, Kroko / Parakeet / Vosk engines, recogniser thread |
-| `versecast/modelpack.py` | Installs the optional Parakeet model pack |
-| `versecast/displays.py` | Monitor enumeration (Win32 / CoreGraphics / xrandr) |
-| `versecast/render.py` | Shared slide renderer with auto-fit (output and thumbnails) |
-| `versecast/controller.py` | Preview/Live selection state and stepping |
-| `versecast/ui_operator.py`, `ui_output.py`, `ui_settings.py` | Tk windows |
-| `versecast/settings.py`, `paths.py` | JSON settings, resource and config locations |
+| `biverse/books.py` | 66 books: spoken names, mis-transcriptions, typed abbreviations, strict flag |
+| `biverse/numbers.py` | Text normalisation and number words to digits |
+| `biverse/parser.py` | Text to `Reference` (speech and typed modes), validation, Psalm 119 fallback |
+| `biverse/detector.py` | Context across pauses, de-duplication, range extension, relative verses |
+| `biverse/bible.py` | SQLite access: verses, ranges, next/prev, phrase search |
+| `biverse/audio.py` | Device listing, capture, downmix, level, async open, watchdog |
+| `biverse/recognizer.py` | Model discovery and choice, Kroko / Parakeet / Vosk engines, recogniser thread |
+| `biverse/modelpack.py` | Installs the optional Parakeet model pack |
+| `biverse/displays.py` | Monitor enumeration (Win32 / CoreGraphics / xrandr) |
+| `biverse/render.py` | Shared slide renderer with auto-fit (output and thumbnails) |
+| `biverse/controller.py` | Preview/Live selection state and stepping |
+| `biverse/ui_operator.py`, `ui_output.py`, `ui_settings.py` | Tk windows |
+| `biverse/settings.py`, `paths.py` | JSON settings, resource and config locations |
 | `tools/` | DB builder, model fetcher, translation importer, icons, screenshots |
 
 Runtime dependencies are only `sherpa-onnx`, `vosk==0.3.44`, `sounddevice` and the standard library (no numpy). See

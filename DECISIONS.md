@@ -5,14 +5,16 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 
 ## Naming
 
-- **Product name: BiVerse.** The brief opens with "You are building BiVerse" but later uses
-  *VerseCast* for the package, settings folder, zip names and bundle id. Everything a user
-  sees uses **BiVerse**: window titles, `BiVerse.exe`, `BiVerse.app`, zip names
-  (`BiVerse-<version>-<build>.zip`) and the settings folder (`%APPDATA%\BiVerse`,
-  `~/Library/Application Support/BiVerse`, `~/.config/biverse`). Two internal identifiers
-  keep the spec's literal values because they were spelled out explicitly: the Python package
-  is `versecast` (per the package layout) and the macOS bundle identifier is
-  `org.versecast.app`. The PyInstaller spec keeps the name `packaging/versecast.spec`.
+- **Product name: Biverse (v1.3).** The original brief used both "BiVerse" and *VerseCast*.
+  v1.0–v1.2 showed "BiVerse" to users and kept `versecast` as the Python package and
+  `org.versecast.app` as the macOS bundle id. From v1.3 the name is **Biverse** everywhere:
+  - window titles, `Biverse.exe`, `Biverse.app` and zip names (`Biverse-<version>-<build>.zip`)
+  - the Python package `biverse` (`python -m biverse`) and `packaging/biverse.spec`
+  - the bundle id `org.biverse.app`. macOS will ask for microphone permission again once,
+    because it sees a new app.
+  - the settings folder `%APPDATA%\Biverse`, `~/Library/Application Support/Biverse`,
+    `~/.config/biverse`. On Windows and default macOS disks, names are case-insensitive, so the
+    old `BiVerse` folder is the same folder. On case-sensitive disks it is renamed on first run.
 - **Repository layout.** The local git repository root was the parent `personal/` folder. To
   put `.github/` at the repository root, `biverse/` was made its own checkout of the same
   remote (`CeoFred/biverse`), continuing its history. The parent repository was left as it
@@ -38,14 +40,14 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   reproducible from pinned sources.
 - **Licensed translations go to a separate user database** (`user_translations.db` in the
   settings folder), so they survive updates and are never bundled. Import them with
-  `tools/import_translation.py` or `BiVerse --import-translation`.
+  `tools/import_translation.py` or `Biverse --import-translation`.
 - **No FTS.** Word-wise `LIKE` search takes 20–40 ms over a translation, so the optional
   runtime FTS table was not added. Exact-order matches are ranked first, then all-words
   matches.
 
 ## Parser
 
-- **A verse table is embedded for validation** (`versecast/versification.py`, generated from
+- **A verse table is embedded for validation** (`biverse/versification.py`, generated from
   the KJV). The parser validates without opening the database, and the app passes the
   database's `verse_count` in. Both hold the same numbers, and the DB builder asserts that
   they agree.
@@ -124,7 +126,7 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   verse 8" is a relative reference rather than a command: the UI tells the detector which book
   and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
   newest of that and the last detection.
-- **Following the reading (phase 2).** `versecast/follow.py` aligns the last 12 spoken words
+- **Following the reading (phase 2).** `biverse/follow.py` aligns the last 12 spoken words
   (Kroko partials, about 5 updates a second) with the live verse in every installed translation,
   using a fuzzy in-order longest common subsequence. Spoken and verse words count as equal if
   identical, if they share a 4-letter prefix, or if their similarity ratio is at least 0.75.
@@ -186,7 +188,7 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   names; its misses are near-miss spellings ("Habakku", "Nebamiah"), so the fuzzy name match
   helps more than biasing does. Hotwords at 2.0 started breaking "2 John" and "Haggai".
   Hotwords use modified beam search (4 paths) with a BPE vocab generated from the model's
-  tokens.txt into the settings folder. If a model rejects them, BiVerse falls back to plain
+  tokens.txt into the settings folder. If a model rejects them, Biverse falls back to plain
   decoding.
 - **Near-miss book names** are matched with difflib (ratio ≥ 0.75, a clear margin over the
   next book, at least 5 letters, not a common English word). They count only when "chapter N"
@@ -260,7 +262,7 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **The sounddevice wheel ships every platform's PortAudio.** The spec keeps only this
   platform's and architecture's library, and drops the ASIO variants.
 - **No UPX.** It causes antivirus false positives.
-- **Windows smoke test.** `BiVerse.exe` is a GUI-subsystem program with no console, so CI runs
+- **Windows smoke test.** `Biverse.exe` is a GUI-subsystem program with no console, so CI runs
   it with `Start-Process -Wait` and reads the JSON from `--report self-test.json`.
 - **The Intel macOS runner is `macos-15-intel`**, the last Intel image GitHub announced
   (available until 2027). `macos-13` has been retired.
@@ -277,6 +279,6 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 ## Dependencies
 
 Runtime dependencies are only vosk, sounddevice and the standard library. vosk itself pulls
-in cffi, requests, srt and tqdm. BiVerse never uses requests or tqdm, which vosk needs only for
+in cffi, requests, srt and tqdm. Biverse never uses requests or tqdm, which vosk needs only for
 its model *download* helpers, and the app makes no network calls. Build-time-only tools are
 PyInstaller, pytest and ruff.

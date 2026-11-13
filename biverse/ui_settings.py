@@ -110,7 +110,7 @@ class SettingsDialog(object):
         row += 1
         ttk.Button(sp, text="Install model pack\u2026", command=self._install_pack).grid(
             row=row, column=0, sticky="w")
-        ttk.Label(sp, text="For the Parakeet pack zip from the BiVerse download page. Needs a 64-bit computer "
+        ttk.Label(sp, text="For the Parakeet pack zip from the Biverse download page. Needs a 64-bit computer "
                            "with about 6 GB of RAM or more.", wraplength=330, foreground="#666666").grid(
             row=row, column=1, columnspan=2, sticky="w", padx=(8, 0))
 
@@ -173,12 +173,12 @@ class SettingsDialog(object):
             self.model_path.set(path)
             self.speech_model.set("custom")
             if recognizer.detect_model(path) is None:
-                messagebox.showwarning("Speech model", "That folder does not look like a speech model BiVerse "
+                messagebox.showwarning("Speech model", "That folder does not look like a speech model Biverse "
                                        "can use (a Vosk model, or a sherpa-onnx model with biverse-model.json).",
                                        parent=self.win)
 
     def _install_pack(self) -> None:
-        path = filedialog.askopenfilename(parent=self.win, title="Choose the BiVerse model pack",
+        path = filedialog.askopenfilename(parent=self.win, title="Choose the Biverse model pack",
                                           filetypes=[("Model pack", "*.zip"), ("All files", "*")])
         if path:
             self._ok()

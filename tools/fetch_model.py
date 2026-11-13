@@ -7,7 +7,7 @@
     python tools/fetch_model.py --name parakeet --pack dist/pack.zip   # build the model pack
 
 Every download is verified against a pinned size and SHA-256. Each installed
-model folder gets a ``biverse-model.json`` manifest that tells BiVerse which
+model folder gets a ``biverse-model.json`` manifest that tells Biverse which
 engine runs it.
 """
 
@@ -60,13 +60,13 @@ MODELS = {
     },
 }
 DEFAULT = "kroko"
-PACK_README = """BiVerse high-accuracy speech model pack
+PACK_README = """Biverse high-accuracy speech model pack
 =======================================
 
 Contains NVIDIA Parakeet TDT 0.6B v2 (int8, CC-BY-4.0) and the Silero voice
-activity detector (MIT), packaged for BiVerse.
+activity detector (MIT), packaged for Biverse.
 
-Install: in BiVerse open Settings > Speech > "Install model pack..." and choose
+Install: in Biverse open Settings > Speech > "Install model pack..." and choose
 this zip. It needs a 64-bit computer with about 6 GB of RAM or more.
 """
 
@@ -149,7 +149,7 @@ def install(name: str, dest: str, cache: str, force: bool = False, archive: str 
 
 
 def build_pack(target: str, out: str) -> None:
-    """Zip an installed model folder as a BiVerse model pack."""
+    """Zip an installed model folder as a Biverse model pack."""
     os.makedirs(os.path.dirname(os.path.abspath(out)) or ".", exist_ok=True)
     base = os.path.basename(target.rstrip(os.sep))
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:

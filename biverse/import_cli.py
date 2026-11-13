@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Add a translation your church holds a licence for.
 
-BiVerse ships public-domain translations only. If you have the right to use
+Biverse ships public-domain translations only. If you have the right to use
 another translation, put it in a CSV (or JSON) file and import it:
 
     python tools/import_translation.py MYTR "My Translation" mytranslation.csv
-    BiVerse.exe --import-translation MYTR "My Translation" mytranslation.csv
+    Biverse.exe --import-translation MYTR "My Translation" mytranslation.csv
 
 CSV format (UTF-8, header row required) – the same as scrollmapper's:
 
@@ -17,7 +17,7 @@ JSON format: a list of {"book": 1, "chapter": 1, "verse": 1, "text": "..."}.
 
 The translation is stored in your user settings folder
 (user_translations.db), so it survives app updates and is never bundled.
-Restart BiVerse afterwards; it appears in the Bible list.
+Restart Biverse afterwards; it appears in the Bible list.
 """
 
 from __future__ import annotations
@@ -70,5 +70,5 @@ def run(argv=None) -> int:
 
 
 def run_import(args) -> int:
-    """``BiVerse --import-translation CODE NAME FILE``."""
+    """``Biverse --import-translation CODE NAME FILE``."""
     return run(list(args))

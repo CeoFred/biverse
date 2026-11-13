@@ -18,8 +18,8 @@ import wave
 
 import pytest
 
-from versecast import recognizer
-from versecast.detector import NEW, Detector
+from biverse import recognizer
+from biverse.detector import NEW, Detector
 
 SENTENCE = "please turn in your bibles to john chapter three verse sixteen"
 
@@ -49,7 +49,7 @@ def _read_wav(path):
         rate, ch = w.getframerate(), w.getnchannels()
         data = w.readframes(w.getnframes())
     if ch > 1:
-        from versecast.audio import downmix
+        from biverse.audio import downmix
         data = downmix(data, ch)
     return rate, data
 

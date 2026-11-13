@@ -14,8 +14,8 @@ def op(bible, tmp_path):
     except tk.TclError as exc:
         pytest.skip("no display: %s" % exc)
     root.withdraw()
-    from versecast.settings import Settings
-    from versecast.ui_operator import OperatorWindow
+    from biverse.settings import Settings
+    from biverse.ui_operator import OperatorWindow
     settings = Settings(str(tmp_path / "settings.json"))
     settings["output_visible"] = False
     # Don't load real speech models (up to ~2 GB) in UI tests
@@ -85,7 +85,7 @@ def test_translation_switch_rerenders_live(op):
 
 
 def test_detection_manual_and_auto(op):
-    from versecast.detector import Detector
+    from biverse.detector import Detector
     d = Detector()
     (kind, det), = d.feed_final("romans eight twenty eight", now=0)
     op._on_detection(kind, det)
@@ -122,7 +122,7 @@ def test_settings_saved_on_close(op, tmp_path):
 
 
 def test_settings_dialog_opens(op):
-    from versecast.ui_settings import SettingsDialog
+    from biverse.ui_settings import SettingsDialog
     dlg = SettingsDialog(op)
     op.root.update()
     dlg.bold.set(False)
@@ -139,7 +139,7 @@ def test_render_thumbnail_matches_output_aspect(op):
 
 
 def test_poll_handles_events(op):
-    from versecast.detector import Detector
+    from biverse.detector import Detector
     d = Detector()
     op.events.put(("model", "missing", ""))
     op.events.put(("partial", "turn to john"))
@@ -168,7 +168,7 @@ def test_listen_never_blocks_ui(op, monkeypatch):
     import threading
     import time as _t
 
-    from versecast import audio
+    from biverse import audio
     gate = threading.Event()
 
     def hanging_open(device):
@@ -241,7 +241,7 @@ def test_move_to_verse_uses_live_chapter(op):
 # -- phase 1: intents -------------------------------------------------------------
 
 def _say(op, text, t, channel="main"):
-    from versecast.commands import parse_intent
+    from biverse.commands import parse_intent
     intent = parse_intent(text)
     assert intent is not None, text
     op._on_command(intent, channel, t, text)

@@ -1,7 +1,7 @@
 """Settings stored as JSON in the per-user config folder.
 
 * Loaded with defaults merged in; values of the wrong type are ignored.
-* A corrupt file is backed up (``settings.json.corrupt-<time>``) and BiVerse
+* A corrupt file is backed up (``settings.json.corrupt-<time>``) and Biverse
   starts fresh.
 * Writes are atomic (temp file + ``os.replace``).
 """

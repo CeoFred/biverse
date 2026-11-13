@@ -12,7 +12,7 @@ Sources
     warning (use --strict to make it an error) and the actual checksum is
     recorded in the database's meta table.
 
-This script is the only part of BiVerse that touches the network, and it runs
+This script is the only part of Biverse that touches the network, and it runs
 at build time only.
 """
 
@@ -31,8 +31,8 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from versecast import bible_import  # noqa: E402
-from versecast.versification import VERSE_COUNTS  # noqa: E402
+from biverse import bible_import  # noqa: E402
+from biverse.versification import VERSE_COUNTS  # noqa: E402
 
 SCROLLMAPPER_SHA = "59b18c5af5845728c275d5b7178ad0d024172b1f"
 SCROLLMAPPER_URL = "https://raw.githubusercontent.com/scrollmapper/bible_databases/%s/formats/csv/%s.csv"

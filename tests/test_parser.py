@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from versecast import books
-from versecast.numbers import normalise, number_to_words
-from versecast.parser import parse, parse_typed
+from biverse import books
+from biverse.numbers import normalise, number_to_words
+from biverse.parser import parse, parse_typed
 
 
 def labels(text, mode="speech", **kw):
@@ -78,7 +78,7 @@ def test_every_spoken_name(number, name):
 @pytest.mark.parametrize("book", books.BOOKS, ids=lambda b: b.code)
 def test_every_book_number_form(book):
     # "<book> <c> <v>" in words, with the last chapter and verse of the book
-    from versecast.versification import VERSE_COUNTS
+    from biverse.versification import VERSE_COUNTS
     counts = VERSE_COUNTS[book.number - 1]
     c = len(counts)
     v = counts[-1]
@@ -429,7 +429,7 @@ def test_reference_metadata():
 
 
 def test_fuzzy_references_have_low_confidence():
-    from versecast.parser import AUTO_MIN_CONFIDENCE
+    from biverse.parser import AUTO_MIN_CONFIDENCE
     (ref,) = parse("Turn with me to Habakku chapter 3 verse 5.")
     assert ref.confidence < AUTO_MIN_CONFIDENCE
     (ref,) = parse("turn to habakkuk chapter 3 verse 5")

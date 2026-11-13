@@ -15,7 +15,7 @@ import traceback
 
 from . import APP_NAME, __version__, paths
 
-log = logging.getLogger("versecast")
+log = logging.getLogger("biverse")
 
 SELF_TEST_SENTENCES = [
     ("turn with me to john chapter three verse sixteen", ["John 3:16"]),

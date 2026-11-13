@@ -1,4 +1,4 @@
-"""Importing translations into a BiVerse SQLite database.
+"""Importing translations into a Biverse SQLite database.
 
 Shared by ``tools/build_bible_db.py`` (bundled public-domain texts) and
 ``tools/import_translation.py`` (a translation a church holds a licence for).

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from versecast.follow import ReadingFollower, align, words
+from biverse.follow import ReadingFollower, align, words
 
 
 @pytest.fixture

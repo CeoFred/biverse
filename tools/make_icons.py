@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the BiVerse icon and write PNG, ICO and ICNS files (stdlib only).
+"""Draw the Biverse icon and write PNG, ICO and ICNS files (stdlib only).
 
     python tools/make_icons.py
 

@@ -21,11 +21,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("BIVERSE_CONFIG_DIR", tempfile.mkdtemp(prefix="biverse-shot-"))
 
-from versecast.app import _ttk_theme  # noqa: E402
-from versecast.bible import open_default  # noqa: E402
-from versecast.detector import Detector  # noqa: E402
-from versecast.settings import Settings  # noqa: E402
-from versecast.ui_operator import OperatorWindow  # noqa: E402
+from biverse.app import _ttk_theme  # noqa: E402
+from biverse.bible import open_default  # noqa: E402
+from biverse.detector import Detector  # noqa: E402
+from biverse.settings import Settings  # noqa: E402
+from biverse.ui_operator import OperatorWindow  # noqa: E402
 
 SPEECH = [
     "good morning church please open your bibles with me to romans chapter eight",
