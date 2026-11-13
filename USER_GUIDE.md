@@ -14,8 +14,9 @@ This guide is written for church volunteers. You do not need to be technical.
 - [6. Searching](#6-searching)
 - [7. Keyboard shortcuts](#7-keyboard-shortcuts)
 - [8. Settings](#8-settings)
-- [9. Installing a bigger speech model](#9-installing-a-bigger-speech-model)
+- [9. Speech models: getting the best recognition](#9-speech-models-getting-the-best-recognition)
 - [10. Adding a licensed translation](#10-adding-a-licensed-translation)
+- [Bible versions, emphasis and the sermon summary](#bible-versions-emphasis-and-the-sermon-summary)
 - [11. Troubleshooting](#11-troubleshooting)
 
 ---
@@ -269,6 +270,8 @@ On a Mac, use Cmd instead of Ctrl.
 | Ctrl+L | Listen on/off |
 | Ctrl+M | Manual / Auto |
 | F6 | Pause / resume following the reading |
+| Ctrl+E | Emphasis: bold / underline / highlight words of the verse |
+| Ctrl+Shift+S | Sermon summary |
 | F11 (on the output window) | Full screen / window |
 
 ---
@@ -350,6 +353,41 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
 
 ---
 
+## Bible versions, emphasis and the sermon summary
+
+**Changing the Bible version by voice.** The preacher can say "let's read this in the ASV",
+"switch to the King James", "World English please" or "can we see that in Young's Literal". The
+projector switches at once and **stays on that version until it is changed again** (by voice or
+the Bible list). If the version isn't installed (for example "the NIV"), the Status line says so
+and lists the installed ones. Quoting a version ("the King James version says…") does not switch.
+
+**Emphasis: bold, underline or highlight words.** Press **✎ Emphasis** (or Ctrl+E / Cmd+E) while
+a verse is live or in Preview. Select words in the window that opens and press **Bold**,
+**Underline** or **Highlight**; press again to remove. The projector updates immediately. Marks are
+remembered for that verse in that version, so they come back next time. The highlight colour is in
+Settings → Appearance.
+
+**Sermon summary.** While listening, Biverse keeps a record of what was said and which scriptures
+came up. Open **Service → Sermon summary** (Ctrl+Shift+S) during or after the service for:
+
+- every scripture referenced, in order, with the time;
+- the main themes and key points (sentences taken from the sermon itself);
+- a timeline, and the full transcript when you **Save as…** or **Copy**.
+
+Each service is saved automatically (Service → Open a previous sermon…). A new record starts when
+you press Listen after a 30-minute break, or with Service → Start a new sermon.
+
+**AI-written summary (optional).** Download `Biverse-ai-summary-pack-….zip` (about 1.2 GB) from the
+Releases page and install it with Settings → Speech → **Install model pack…**. The summary window
+then offers **Write AI summary**: a short prose summary written on this computer (nothing is sent
+anywhere) in under a minute. It needs a 64-bit computer with about 8 GB of RAM; Windows 7/8 and
+32-bit computers can't run it.
+
+**The look of the window** follows your computer's light or dark setting. Choose Dark or Light
+permanently in Settings → Appearance → "Operator window look".
+
+---
+
 ## 11. Troubleshooting
 
 **The level meter does not move.**
@@ -386,6 +424,13 @@ the microphone by itself every few seconds.
 **"No speech model could be used" banner.** The `models` folder is missing, or (on an old
 computer) the model could not start. Re-extract the download,
 or choose a model folder in Settings → Speech. Search and projection still work without one.
+
+**On an Intel Mac, both windows are black or the app closes straight away.** Versions 1.0–1.2
+had this problem on macOS 11 and 12; it is fixed from 1.2.1. Download the latest
+`Biverse-…-macos-intel.zip`.
+
+**macOS asks for microphone permission again after updating to 1.3.** That is expected once: the
+app's internal identifier changed with the new name.
 
 **macOS says the app is damaged or from an unidentified developer.** See *Installing → macOS*
 (right-click → Open, or the `xattr` command).

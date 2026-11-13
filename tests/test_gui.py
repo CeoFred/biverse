@@ -425,3 +425,22 @@ def test_theme_setting_forces_mode(op, monkeypatch):
     op.settings["ui_theme"] = "light"
     op._check_theme()
     assert op.theme_mode == "light"
+
+
+def test_sermon_record_and_summary_window(op):
+    op.new_sermon(quiet=True)
+    for text in ["Turn with me to John chapter three verse sixteen.",
+                 "The point is that the love of God is a gift we receive by faith alone today.",
+                 "Remember this: grace means the love of God comes before our work and effort."]:
+        op._add_final(text)
+    from biverse.detector import Detector
+    (kind, det), = Detector().feed_final("john three sixteen", now=0)
+    op._on_detection(kind, det)
+    assert op.sermon.refs[-1][1] == "John 3:16"
+    from biverse.ui_summary import SummaryWindow
+    w = SummaryWindow(op, op.sermon)
+    op.root.update()
+    body = w.text.get("1.0", "end")
+    assert "John 3:16" in body and "Key points" in body
+    assert "Scriptures" in w.text_for_export()
+    w.win.destroy()

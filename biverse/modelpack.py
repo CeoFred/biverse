@@ -53,7 +53,7 @@ def inspect(zip_path: str) -> str:
             manifest = json.loads(zf.read(manifests[0]).decode("utf-8"))
         except ValueError:
             raise PackError("the pack's manifest is damaged")
-        if manifest.get("engine") not in ("sherpa-online", "sherpa-offline", "vosk"):
+        if manifest.get("engine") not in ("sherpa-online", "sherpa-offline", "vosk", "llm"):
             raise PackError("unknown engine in pack: %r" % manifest.get("engine"))
         return manifests[0].split("/")[0]
 

@@ -24,6 +24,12 @@ computer. There is no internet connection, account, cloud service or telemetry.
 - **Manual mode** (detections go to Preview, and you press Go Live) and **Auto mode**
   (detections go straight to Live).
 - Search by reference (`jn 3:16`, `1 cor 13 4-7`) or by phrase (`for god so loved`).
+- Voice navigation and **following the reading**: Biverse moves to the next verse as the preacher
+  finishes each one; "stop there" / "continue"; "let's read this in the ASV" switches version.
+- **Emphasis**: bold, underline or highlight words of a verse on the projector.
+- **Sermon summary**: scriptures, key points and timeline built in; an optional offline AI pack
+  writes a prose summary.
+- Modern light/dark interface that follows the computer's setting.
 - Translations: **KJV, WEB, ASV, YLT and BBE** (all public domain). You can switch at any
   time, and you can import a translation your church is licensed for.
 - A borderless output window on any monitor, with auto-fitted text, colours, fonts, a shadow
@@ -44,6 +50,7 @@ Get the zip for your computer from the
 | `Biverse-<version>-macos-arm.zip` | Apple Silicon Macs, macOS 11+ |
 | `Biverse-<version>-macos-intel.zip` | Intel Macs, macOS 10.15+ (also runs on Apple Silicon via Rosetta) |
 | `Biverse-model-pack-parakeet-<version>.zip` | Optional high-accuracy speech model (64-bit, ~6 GB RAM) |
+| `Biverse-ai-summary-pack-<version>.zip` | Optional offline AI sermon summary (64-bit, ~8 GB RAM) |
 
 `SHA256SUMS.txt` lists the checksums. The [User Guide](USER_GUIDE.md) covers installation,
 connecting the projector, audio sources and troubleshooting, for non-technical volunteers.
@@ -113,7 +120,11 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `biverse/bible.py` | SQLite access: verses, ranges, next/prev, phrase search |
 | `biverse/audio.py` | Device listing, capture, downmix, level, async open, watchdog |
 | `biverse/recognizer.py` | Model discovery and choice, Kroko / Parakeet / Vosk engines, recogniser thread |
-| `biverse/modelpack.py` | Installs the optional Parakeet model pack |
+| `biverse/modelpack.py` | Installs the optional model packs (Parakeet, AI summary) |
+| `biverse/follow.py`, `commands.py` | Following the reading; spoken navigation and version switching |
+| `biverse/emphasis.py`, `ui_emphasis.py` | Bold / underline / highlight marks per verse |
+| `biverse/summary.py`, `llm.py`, `ui_summary.py` | Sermon record, built-in summary, optional AI summary |
+| `biverse/theme.py` | Light/dark look following the computer |
 | `biverse/displays.py` | Monitor enumeration (Win32 / CoreGraphics / xrandr) |
 | `biverse/render.py` | Shared slide renderer with auto-fit (output and thumbnails) |
 | `biverse/controller.py` | Preview/Live selection state and stepping |

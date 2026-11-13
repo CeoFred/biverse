@@ -8,6 +8,8 @@ Biverse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (bundled by sherpa-onnx) | Neural network runtime | MIT |
 | [Kroko ASR](https://huggingface.co/Banafo/Kroko-ASR) English community streaming model (2025-08-06), by Banafo, ONNX export by sherpa-onnx | Built-in live speech model | CC-BY-SA, as stated on the model card (the repository's LICENSE file is empty and gives no version). Attribution: "Kroko ASR community model by Banafo". The model files keep this licence; Biverse's own code is MIT |
 | [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), int8 ONNX export by sherpa-onnx | Optional high-accuracy model pack | CC-BY-4.0. Attribution: "parakeet-tdt-0.6b-v2 by NVIDIA". NVIDIA does not endorse Biverse |
+| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) (GGUF q4_k_m) | Optional AI summary pack | Apache License 2.0 (Alibaba Cloud / Qwen team) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) b12366 `llama-completion` | Runs the AI summary model in the optional pack | MIT |
 | [Silero VAD](https://github.com/snakers4/silero-vad) | Speech/pause detection in the Parakeet pack | MIT |
 | [Vosk API](https://github.com/alphacep/vosk-api) 0.3.44 (`libvosk`, Python bindings) | Offline speech recognition | Apache License 2.0 |
 | [vosk-model-small-en-us-0.15](https://alphacephei.com/vosk/models) | English speech model, © 2020 Alpha Cephei Inc | Apache License 2.0 |

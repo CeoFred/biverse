@@ -57,6 +57,7 @@ class OperatorWindow(object):
         self._results = {}  # type: Dict[str, Selection]
         self._closing = False
         self._last_command = None
+        self.sermon = None  # SermonLog of the current service
         self._partials_seen = False
         self._passage_start = None  # (book, chapter, verse) of the passage last sent live
         self.following = True       # follow-the-reading on/off ("stop there" / "continue")
@@ -113,6 +114,12 @@ class OperatorWindow(object):
         outm.add_command(label="Test output", command=self.test_output)
         outm.add_command(label="Refresh displays", command=self.refresh_displays)
         menubar.add_cascade(label="Output", menu=outm)
+        servm = tk.Menu(menubar, tearoff=False)
+        servm.add_command(label="Sermon summary\u2026", command=self.open_summary,
+                          accelerator="%s+Shift+S" % MOD_LABEL)
+        servm.add_command(label="Start a new sermon", command=self.new_sermon)
+        servm.add_command(label="Open a previous sermon\u2026", command=self.open_previous_sermon)
+        menubar.add_cascade(label="Service", menu=servm)
         helpm = tk.Menu(menubar, tearoff=False)
         helpm.add_command(label="Keyboard shortcuts", command=self.show_shortcuts)
         helpm.add_command(label="Open log folder", command=self.open_log_folder)
@@ -293,6 +300,8 @@ class OperatorWindow(object):
         r = self.root
         r.bind_all("<F6>", lambda e: self._key(self.toggle_following))
         r.bind_all("<%s-e>" % MOD, lambda e: self._key(self.open_emphasis))
+        r.bind_all("<%s-Shift-S>" % MOD, lambda e: self._key(self.open_summary))
+        r.bind_all("<%s-Shift-s>" % MOD, lambda e: self._key(self.open_summary))
         for seq in ("<%s-Return>" % MOD, "<%s-KP_Enter>" % MOD, "<F5>"):
             r.bind_all(seq, lambda e: self._key(self.go_live))
         r.bind_all("<Escape>", lambda e: self._key(self.blank))
@@ -426,6 +435,8 @@ class OperatorWindow(object):
             self.start_listening()
 
     def start_listening(self) -> None:
+        if self.sermon is None or time.time() - self.sermon.ended > 30 * 60:
+            self.new_sermon(quiet=True)  # a new service: start a fresh sermon record
         if self.engine.state in ("missing", "error"):
             self._status("No speech model — see the yellow banner", error=True)
             return
@@ -470,6 +481,7 @@ class OperatorWindow(object):
             self.audio_retry_at = time.monotonic() + 3
 
     def stop_listening(self) -> None:
+        self._save_sermon()
         self.listening = False
         self.capture.stop()
         self.engine.stop()
@@ -687,6 +699,8 @@ class OperatorWindow(object):
         self._insert_transcript(f)
 
     def _add_final(self, text: str) -> None:
+        if self.sermon is not None:
+            self.sermon.add_line(text)
         def f(t):
             ranges = t.tag_ranges("partial")
             if ranges:
@@ -725,6 +739,8 @@ class OperatorWindow(object):
             self.detected.move(iid, "", 0)
         self._detections[iid] = sel
         log.info("detected %s (%s): %r", label, kind, det.snippet)
+        if self.sermon is not None:
+            self.sermon.add_ref(sel.passage_label())
         from .parser import AUTO_MIN_CONFIDENCE
         auto_ok = (self.mode_var.get() == "auto" and ref.confidence >= AUTO_MIN_CONFIDENCE
                    and (ref.explicit_verse or not self.settings["auto_requires_verse"]))
@@ -1057,6 +1073,41 @@ class OperatorWindow(object):
             color = self.pal["ok"] if level < 75 else (self.pal["warn"] if level < 92 else self.pal["error"])
             c.create_rectangle(0, 0, fill, h, fill=color, width=0, tags="bar")
 
+    # -- sermon record and summary ----------------------------------------------------
+    def new_sermon(self, quiet: bool = False) -> None:
+        from .summary import SermonLog
+        self._save_sermon()
+        self.sermon = SermonLog()
+        if not quiet:
+            self._status("Started a new sermon record")
+
+    def _save_sermon(self) -> None:
+        if self.sermon is not None and not self.sermon.empty():
+            try:
+                self.sermon.save()
+            except OSError:
+                log.exception("could not save the sermon record")
+
+    def open_summary(self, sermon=None) -> None:
+        from .summary import SermonLog
+        from .ui_summary import SummaryWindow
+        SummaryWindow(self, sermon or self.sermon or SermonLog())
+
+    def open_previous_sermon(self) -> None:
+        import json as _json
+        from tkinter import filedialog
+
+        from .summary import SermonLog
+        path = filedialog.askopenfilename(parent=self.root, title="Open a sermon record",
+                                          initialdir=os.path.join(paths.config_dir(), "sermons"),
+                                          filetypes=[("Sermon records", "*.json")])
+        if path:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self.open_summary(SermonLog.from_dict(_json.load(f)))
+            except (OSError, ValueError) as exc:
+                messagebox.showerror(APP_NAME, "That file could not be opened:\n%s" % exc, parent=self.root)
+
     def open_emphasis(self) -> None:
         """Bold / underline / highlight words of the live verse (or the preview)."""
         from .ui_emphasis import EmphasisDialog
@@ -1139,5 +1190,6 @@ class OperatorWindow(object):
         except Exception:
             log.exception("stopping audio")
         self.settings.save()
+        self._save_sermon()
         self.output.destroy()
         self.root.destroy()

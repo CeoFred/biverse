@@ -222,11 +222,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: parakeet-${{ hashFiles('tools/fetch_model.py') }}
+          key: packs-${{ hashFiles('tools/fetch_model.py') }}
       - name: High-accuracy model pack (Parakeet + Silero VAD)
         run: |
           VERSION=$(python -c 'import biverse; print(biverse.__version__)')
           python tools/fetch_model.py --name parakeet --dest pack-models --pack "pack/Biverse-model-pack-parakeet-$VERSION.zip"
+      - name: AI summary pack (Qwen2.5 1.5B + llama.cpp for macOS, Windows, Linux)
+        run: |
+          VERSION=$(python -c 'import biverse; print(biverse.__version__)')
+          python tools/fetch_model.py --name ai-summary --dest pack-models --pack "pack/Biverse-ai-summary-pack-$VERSION.zip"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts

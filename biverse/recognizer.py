@@ -176,7 +176,9 @@ def discover_models(custom_path: Optional[str] = None) -> List[ModelInfo]:
 def engine_available(engine: str) -> bool:
     if engine == "vosk":
         return vosk is not None
-    return sherpa() is not None
+    if engine in ("sherpa-online", "sherpa-offline", "dual"):
+        return sherpa() is not None
+    return False  # not a speech engine (e.g. the AI summary pack)
 
 
 def choose_model(models: List[ModelInfo], preference: str = "auto", custom_path: str = "",

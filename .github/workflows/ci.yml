@@ -113,3 +113,45 @@ jobs:
         run: |
           python tools/fetch_model.py --name parakeet --pack pack.zip
           python -c "from biverse import modelpack; print(modelpack.install('pack.zip', 'installed').label)"
+
+  ai-summary:
+    # The optional AI summary pack (~1.1 GB model + llama.cpp). Runs the real model once.
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      - run: pip install -r requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: ai-summary-${{ hashFiles('tools/fetch_model.py') }}
+      - name: Install the AI pack (Linux binary only)
+        run: python tools/fetch_model.py --name ai-summary --platforms linux-x64 --dest "$HOME/ai"
+      - name: Write a summary with the real model
+        run: |
+          mkdir -p "$RUNNER_TEMP/cfg/models" && mv "$HOME/ai/"* "$RUNNER_TEMP/cfg/models/"
+          BIVERSE_CONFIG_DIR="$RUNNER_TEMP/cfg" python - <<'EOF'
+          import time
+          from biverse import llm
+          from biverse.summary import SermonLog, summarise
+          log = SermonLog(started=0)
+          for t, line in enumerate([
+              "Please turn with me to John chapter three verse sixteen.",
+              "The point is that the love of God is a gift we receive by faith and not by our works.",
+              "Many people try to earn the love of God by working harder and harder every day.",
+              "Remember this: grace means God's love comes before our work, not after it.",
+              "In conclusion, receive the gift of his love and share it with someone this week."]):
+              log.add_line(line, when=t * 30)
+          log.add_ref("John 3:16", when=20)
+          pack = llm.find_pack()
+          assert pack is not None, "AI pack not found"
+          t = time.time()
+          text = llm.summarise_ai(pack, summarise(log))
+          print("---- AI summary (%.1f s) ----\n%s" % (time.time() - t, text))
+          assert len(text.split()) >= 15, text
+          assert "love" in text.lower() or "grace" in text.lower(), text
+          EOF

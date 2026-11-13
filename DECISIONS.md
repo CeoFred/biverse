@@ -126,6 +126,36 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   verse 8" is a relative reference rather than a command: the UI tells the detector which book
   and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
   newest of that and the last detection.
+- **Bible version by voice (v1.3)** stays switched until it is changed again, as the user chose.
+  A request needs a switching verb ("switch/change/use/show"), a "read … in …" instruction at
+  the start of the sentence, or a short request ("ASV please"). "As we read in the King
+  James…" and "the King James version says…" are quotations and do not switch. Names are
+  matched longest first ("New King James" before "King James", "New American Standard" before
+  "American Standard"). Spelled-out abbreviations are joined ("k j v" → kjv). "young" and
+  "amp" alone are not names ("the young people", "the amp").
+- **Emphasis (v1.3)** is stored per translation, book, chapter and verse as word indices in
+  `emphasis.json`, because word positions differ between translations. Verses with marks are
+  drawn word by word, using the same greedy wrap and auto-fit size as plain verses, so line
+  breaks don't change when marks are added. Plain verses still use the single text item
+  (unchanged rendering). Highlighted words use dark text on the highlight colour for contrast.
+- **Modern look (v1.3)** uses ttk "clam" restyled with two palettes; the native aqua and vista
+  themes cannot be recoloured. It follows the OS dark/light setting (macOS `defaults`, the
+  Windows registry, GNOME `gsettings`), re-checked every 5 s. `BIVERSE_THEME` forces one look
+  for screenshots.
+- **Sermon summary (v1.3).** The built-in summary is extractive and offline: sentences of 7–60
+  words, scored by frequent content words, with a bonus for signposts ("the point is",
+  "remember", "number one", "in conclusion") and for sentences within 60 s after a scripture.
+  It shows the top 7 in chronological order, plus the scriptures and a timeline.
+
+  The optional AI pack is Qwen2.5-1.5B-Instruct (Apache-2.0; the 3B model's licence is not
+  Apache) run by llama.cpp's `llama-completion` as a separate process, so there are no Python
+  dependencies and no network. One pack holds the binaries for macOS (both CPUs), Windows x64
+  and Linux x64. The model only sees the extractive key points and scriptures (small prompt,
+  fast, grounded), and is told not to add verses.
+
+  It was **not run locally**: executing the downloaded binary was blocked by the session's
+  permission policy. A CI job (`ai-summary`) runs the real model on Linux, and a stand-in
+  program tests the integration on every platform.
 - **Following the reading (phase 2).** `biverse/follow.py` aligns the last 12 spoken words
   (Kroko partials, about 5 updates a second) with the live verse in every installed translation,
   using a fuzzy in-order longest common subsequence. Spoken and verse words count as equal if
