@@ -1,0 +1,17 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "vosk: needs the Vosk speech model in models/ (skipped when absent)",
+    "gui: needs a display for Tk (skipped when absent)",
+]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 120
+extend-exclude = ["versecast/versification.py", ".venv*", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP"]
+# UP: keep 3.8-compatible typing comments and old-style classes on purpose
+ignore = ["UP004", "UP006", "UP007", "UP008", "UP009", "UP025", "UP031", "UP032", "UP035", "UP037", "B008", "B904"]
