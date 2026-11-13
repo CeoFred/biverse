@@ -1,0 +1,886 @@
+"""The operator's control window."""
+
+from __future__ import annotations
+
+import logging
+import os
+import queue
+import subprocess
+import sys
+import time
+import tkinter as tk
+from tkinter import messagebox, ttk
+from typing import Optional
+
+from . import APP_NAME, __version__, audio, displays, paths
+from .bible import Bible
+from .controller import LiveState, Selection, SlideBuilder, step
+from .detector import NEW, Detector
+from .parser import parse_typed
+from .recognizer import SpeechEngine
+from .render import BLACK, BLANK, EMPTY, Renderer, Slide
+from .settings import Settings
+from .ui_output import OutputWindow
+
+log = logging.getLogger(__name__)
+
+IS_MAC = sys.platform == "darwin"
+MOD = "Command" if IS_MAC else "Control"
+MOD_LABEL = "Cmd" if IS_MAC else "Ctrl"
+POLL_MS = 50
+TRANSCRIPT_SECONDS = 120
+SAMPLE = Selection(19, 23, 1, 1)
+
+
+class OperatorWindow(object):
+    def __init__(self, root: tk.Tk, settings: Settings, bible: Bible) -> None:
+        self.root = root
+        self.settings = settings
+        self.bible = bible
+        self.events = queue.Queue()  # type: queue.Queue
+        self.renderer = Renderer(root)
+        self.builder = SlideBuilder(bible)
+        self.preview = None  # type: Optional[Selection]
+        self.live = LiveState()
+        self.devices = []  # type: List[audio.InputDevice]
+        self.displays = []  # type: List[displays.Display]
+        self.display = None  # type: Optional[displays.Display]
+        self.listening = False
+        self.audio_retry_at = 0.0
+        self._tick = 0
+        self._transcript_lines = []  # type: List[float]
+        self._detections = {}  # type: Dict[str, object]
+        self._results = {}  # type: Dict[str, Selection]
+        self._closing = False
+
+        if not bible.has_translation(settings["translation"]):
+            settings["translation"] = bible.default_translation()
+
+        self.detector = Detector(strict=settings["strict_books"], relative=settings["relative_verses"],
+                                 dedupe_window=float(settings["dedupe_window"]),
+                                 verse_count=bible.verse_count)
+        self.engine = SpeechEngine(self.events, self.detector)
+        self.capture = audio.AudioCapture(self.engine.audio_queue)
+
+        self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
+
+        root.title("%s %s" % (APP_NAME, __version__))
+        root.minsize(900, 560)
+        self._build_menu()
+        self._build()
+        self._bind_keys()
+        self._restore_geometry()
+
+        self.refresh_devices(initial=True)
+        self.refresh_displays(initial=True)
+        if settings["output_visible"]:
+            self.output.show()
+        self._render_all()
+        self.engine.load(settings["model_path"] or None)
+        root.protocol("WM_DELETE_WINDOW", self.close)
+        root.after(POLL_MS, self._poll)
+
+    # ------------------------------------------------------------------ build
+    def _build_menu(self) -> None:
+        menubar = tk.Menu(self.root)
+        filem = tk.Menu(menubar, tearoff=False)
+        filem.add_command(label="Settings…", command=self.open_settings)
+        filem.add_separator()
+        filem.add_command(label="Quit", command=self.close, accelerator="%s+Q" % MOD_LABEL)
+        menubar.add_cascade(label="File", menu=filem)
+        outm = tk.Menu(menubar, tearoff=False)
+        outm.add_command(label="Show / hide output", command=self.toggle_output)
+        outm.add_command(label="Toggle output full screen (F11)", command=self.output.toggle_fullscreen)
+        outm.add_command(label="Test output", command=self.test_output)
+        outm.add_command(label="Refresh displays", command=self.refresh_displays)
+        menubar.add_cascade(label="Output", menu=outm)
+        helpm = tk.Menu(menubar, tearoff=False)
+        helpm.add_command(label="Keyboard shortcuts", command=self.show_shortcuts)
+        helpm.add_command(label="Open log folder", command=self.open_log_folder)
+        helpm.add_command(label="About %s" % APP_NAME, command=self.show_about)
+        menubar.add_cascade(label="Help", menu=helpm)
+        self.root.configure(menu=menubar)
+
+    def _build(self) -> None:
+        root = self.root
+        outer = ttk.Frame(root, padding=(6, 4, 6, 6))
+        outer.pack(fill="both", expand=True)
+
+        # banner (missing model / errors)
+        self.banner = tk.Label(outer, text="", anchor="w", justify="left", background="#fff3cd",
+                               foreground="#5c4400", padx=8, pady=4, wraplength=900)
+
+        # row 1: input
+        r1 = ttk.Frame(outer)
+        r1.pack(fill="x", pady=(0, 2))
+        ttk.Label(r1, text="Input:").pack(side="left")
+        self.input_var = tk.StringVar()
+        self.input_combo = ttk.Combobox(r1, textvariable=self.input_var, state="readonly", width=38)
+        self.input_combo.pack(side="left", padx=(4, 2))
+        self.input_combo.bind("<<ComboboxSelected>>", lambda e: self._on_device_selected())
+        ttk.Button(r1, text="⟳", width=3, command=self.refresh_devices).pack(side="left")
+        self.meter = tk.Canvas(r1, width=110, height=14, highlightthickness=1, highlightbackground="#888",
+                               background="#202020")
+        self.meter.pack(side="left", padx=6)
+        self.listen_dot = tk.Label(r1, text="●", foreground="#888888", font=("TkDefaultFont", 14))
+        self.listen_dot.pack(side="left")
+        self.listen_btn = ttk.Button(r1, text="Listen", width=10, command=self.toggle_listen)
+        self.listen_btn.pack(side="left", padx=(0, 8))
+        ttk.Label(r1, text="Status:").pack(side="left")
+        self.status_var = tk.StringVar(value="Starting…")
+        self.status_label = tk.Label(r1, textvariable=self.status_var, anchor="w")
+        self.status_label.pack(side="left", fill="x", expand=True, padx=4)
+        self._status_fg = self.status_label.cget("foreground")
+
+        # row 2: output + translation
+        r2 = ttk.Frame(outer)
+        r2.pack(fill="x", pady=2)
+        ttk.Label(r2, text="Output:").pack(side="left")
+        self.display_var = tk.StringVar()
+        self.display_combo = ttk.Combobox(r2, textvariable=self.display_var, state="readonly", width=30)
+        self.display_combo.pack(side="left", padx=(4, 2))
+        self.display_combo.bind("<<ComboboxSelected>>", lambda e: self._on_display_selected())
+        ttk.Button(r2, text="⟳", width=3, command=self.refresh_displays).pack(side="left")
+        self.output_btn = ttk.Button(r2, text="Show output", width=12, command=self.toggle_output)
+        self.output_btn.pack(side="left", padx=6)
+        ttk.Label(r2, text="Bible:").pack(side="left", padx=(10, 0))
+        self.translation_var = tk.StringVar(value=self.settings["translation"])
+        codes = [c for c, _, _ in self.bible.translations()]
+        self.translation_combo = ttk.Combobox(r2, textvariable=self.translation_var, values=codes,
+                                              state="readonly", width=8)
+        self.translation_combo.pack(side="left", padx=4)
+        self.translation_combo.bind("<<ComboboxSelected>>", lambda e: self._on_translation())
+        self.translation_name = ttk.Label(r2, text="", foreground="#666666")
+        self.translation_name.pack(side="left")
+
+        # row 3: mode + settings
+        r3 = ttk.Frame(outer)
+        r3.pack(fill="x", pady=(2, 4))
+        ttk.Label(r3, text="Mode:").pack(side="left")
+        self.mode_var = tk.StringVar(value=self.settings["mode"])
+        ttk.Radiobutton(r3, text="Manual", value="manual", variable=self.mode_var,
+                        command=self._on_mode).pack(side="left", padx=4)
+        ttk.Radiobutton(r3, text="Auto", value="auto", variable=self.mode_var,
+                        command=self._on_mode).pack(side="left", padx=4)
+        self.mode_hint = ttk.Label(r3, text="", foreground="#666666")
+        self.mode_hint.pack(side="left", padx=8)
+        ttk.Button(r3, text="⚙ Settings", command=self.open_settings).pack(side="right")
+        self.banner_anchor = r1
+
+        # main area
+        main = ttk.PanedWindow(outer, orient="horizontal")
+        main.pack(fill="both", expand=True)
+        left = ttk.PanedWindow(main, orient="vertical")
+        right = ttk.Frame(main)
+        main.add(left, weight=2)
+        main.add(right, weight=3)
+
+        tframe = ttk.LabelFrame(left, text="Transcript", padding=4)
+        self.transcript = tk.Text(tframe, height=8, wrap="word", state="disabled", relief="flat",
+                                  background="#fbfbfb", foreground="#111111", font=("TkDefaultFont", 11))
+        tscroll = ttk.Scrollbar(tframe, command=self.transcript.yview)
+        self.transcript.configure(yscrollcommand=tscroll.set)
+        tscroll.pack(side="right", fill="y")
+        self.transcript.pack(fill="both", expand=True)
+        self.transcript.tag_configure("partial", foreground="#999999")
+        self.transcript.tag_configure("time", foreground="#999999")
+        left.add(tframe, weight=1)
+
+        dframe = ttk.LabelFrame(left, text="Detected  (click = preview, double-click = go live)", padding=4)
+        self.detected = ttk.Treeview(dframe, columns=("time", "ref", "snippet"), show="headings",
+                                     selectmode="browse", height=6)
+        for col, title, width, stretch in (("time", "Time", 70, False), ("ref", "Reference", 140, False),
+                                           ("snippet", "Heard", 200, True)):
+            self.detected.heading(col, text=title, anchor="w")
+            self.detected.column(col, width=width, stretch=stretch, anchor="w")
+        dscroll = ttk.Scrollbar(dframe, command=self.detected.yview)
+        self.detected.configure(yscrollcommand=dscroll.set)
+        dscroll.pack(side="right", fill="y")
+        self.detected.pack(fill="both", expand=True)
+        self.detected.bind("<<TreeviewSelect>>", lambda e: self._on_detection_click())
+        self.detected.bind("<Double-1>", lambda e: self._on_detection_double())
+        self.detected.bind("<Return>", lambda e: self._on_detection_double())
+        left.add(dframe, weight=1)
+
+        # right: thumbnails
+        thumbs = ttk.Frame(right)
+        thumbs.pack(fill="x", padx=(6, 0))
+        thumbs.columnconfigure(0, weight=1, uniform="t")
+        thumbs.columnconfigure(1, weight=1, uniform="t")
+        ttk.Label(thumbs, text="PREVIEW", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(thumbs, text="LIVE", font=("TkDefaultFont", 10, "bold"), foreground="#b00020").grid(
+            row=0, column=1, sticky="w", padx=(6, 0))
+        self.preview_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2,
+                                        highlightbackground="#4a7bd0", height=120)
+        self.live_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2,
+                                     highlightbackground="#d02040", height=120)
+        self.preview_canvas.grid(row=1, column=0, sticky="ew")
+        self.live_canvas.grid(row=1, column=1, sticky="ew", padx=(6, 0))
+        self.preview_label = ttk.Label(thumbs, text="—")
+        self.live_label = ttk.Label(thumbs, text="—")
+        self.preview_label.grid(row=2, column=0, sticky="w")
+        self.live_label.grid(row=2, column=1, sticky="w", padx=(6, 0))
+        thumbs.bind("<Configure>", lambda e: self._resize_thumbs(e.width))
+        self.preview_canvas.bind("<Double-1>", lambda e: self.go_live())
+
+        buttons = ttk.Frame(right)
+        buttons.pack(fill="x", padx=(6, 0), pady=4)
+        for col in range(4):
+            buttons.columnconfigure(col, weight=1, uniform="b")
+        ttk.Button(buttons, text="◀ Prev", command=lambda: self.step(-1)).grid(row=0, column=0, sticky="ew")
+        self.golive_btn = ttk.Button(buttons, text="GO LIVE ▶", command=self.go_live)
+        self.golive_btn.grid(row=0, column=1, columnspan=2, sticky="ew", padx=4)
+        ttk.Button(buttons, text="Next ▶", command=lambda: self.step(1)).grid(row=0, column=3, sticky="ew")
+        ttk.Button(buttons, text="BLANK (Esc)", command=self.blank).grid(
+            row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
+        ttk.Button(buttons, text="BLACK (Shift+Esc)", command=self.black).grid(
+            row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(2, 0))
+
+        sframe = ttk.LabelFrame(right, text="Search", padding=4)
+        sframe.pack(fill="both", expand=True, padx=(6, 0))
+        srow = ttk.Frame(sframe)
+        srow.pack(fill="x")
+        self.search_var = tk.StringVar()
+        self.search_entry = ttk.Entry(srow, textvariable=self.search_var)
+        self.search_entry.pack(side="left", fill="x", expand=True)
+        self.search_entry.bind("<Return>", lambda e: self.search())
+        self.search_entry.bind("<KP_Enter>", lambda e: self.search())
+        ttk.Button(srow, text="Find", command=self.search).pack(side="left", padx=(4, 0))
+        self.search_info = ttk.Label(sframe, text="Type a reference (jn 3:16, 1 cor 13 4-7) or words "
+                                                  "(for god so loved)", foreground="#666666")
+        self.search_info.pack(fill="x", pady=(2, 2))
+        rframe = ttk.Frame(sframe)
+        rframe.pack(fill="both", expand=True)
+        self.results = ttk.Treeview(rframe, columns=("ref", "text"), show="headings", selectmode="browse",
+                                    height=5)
+        self.results.heading("ref", text="Reference", anchor="w")
+        self.results.heading("text", text="Text", anchor="w")
+        self.results.column("ref", width=130, stretch=False)
+        self.results.column("text", width=300, stretch=True)
+        rscroll = ttk.Scrollbar(rframe, command=self.results.yview)
+        self.results.configure(yscrollcommand=rscroll.set)
+        rscroll.pack(side="right", fill="y")
+        self.results.pack(fill="both", expand=True)
+        self.results.bind("<<TreeviewSelect>>", lambda e: self._on_result_click())
+        self.results.bind("<Double-1>", lambda e: self.go_live())
+        self.results.bind("<Return>", lambda e: self.go_live())
+
+        self._update_translation_name()
+        self._update_mode_hint()
+
+    def _bind_keys(self) -> None:
+        r = self.root
+        for seq in ("<%s-Return>" % MOD, "<%s-KP_Enter>" % MOD, "<F5>"):
+            r.bind_all(seq, lambda e: self._key(self.go_live))
+        r.bind_all("<Escape>", lambda e: self._key(self.blank))
+        r.bind_all("<Shift-Escape>", lambda e: self._key(self.black))
+        r.bind("<<OutputEscape>>", lambda e: self.blank())
+        r.bind_all("<Left>", lambda e: self._arrow(-1, e))
+        r.bind_all("<Right>", lambda e: self._arrow(1, e))
+        r.bind_all("<%s-f>" % MOD, lambda e: self._key(self.focus_search))
+        r.bind_all("<%s-l>" % MOD, lambda e: self._key(self.toggle_listen))
+        r.bind_all("<%s-m>" % MOD, lambda e: self._key(self.toggle_mode))
+        r.bind_all("<%s-q>" % MOD, lambda e: self._key(self.close))
+        if IS_MAC:
+            r.createcommand("tk::mac::Quit", self.close)
+            r.createcommand("tk::mac::ShowPreferences", self.open_settings)
+
+    def _key(self, fn) -> str:
+        fn()
+        return "break"
+
+    def _arrow(self, delta: int, event) -> Optional[str]:
+        w = event.widget
+        if isinstance(w, (tk.Entry, ttk.Entry, tk.Text, ttk.Combobox, tk.Spinbox)):
+            return None
+        if isinstance(w, str):
+            return None
+        self.step(delta, live=True)
+        return "break"
+
+    # ------------------------------------------------------------ geometry
+    def _restore_geometry(self) -> None:
+        geo = self.settings["window_geometry"]
+        if geo:
+            try:
+                size, _, _ = geo.partition("+")
+                w, h = [int(x) for x in size.split("x")]
+                sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+                if w <= sw * 2 and h <= sh * 2:
+                    self.root.geometry(geo)
+                    return
+            except ValueError:
+                pass
+        self.root.geometry("1100x680")
+
+    def _resize_thumbs(self, width: int) -> None:
+        if width < 50:
+            return
+        tw = max(80, (width - 6) // 2 - 4)
+        ow, oh = self.output.size
+        th = int(tw * oh / float(ow)) if ow else int(tw * 9 / 16)
+        avail = max(80, self.root.winfo_height() // 3)
+        if th > avail:
+            th = avail
+        for c in (self.preview_canvas, self.live_canvas):
+            if int(c.cget("height")) != th:
+                c.configure(height=th)
+        self.root.after_idle(self._render_thumbs)
+
+    # -------------------------------------------------------------- devices
+    def refresh_devices(self, initial: bool = False) -> None:
+        if not audio.available():
+            self.input_combo.configure(values=["(audio unavailable)"])
+            self.input_var.set("(audio unavailable)")
+            self._set_banner("Audio is unavailable: %s" % audio.SD_ERROR)
+            return
+        was_listening = self.listening
+        if was_listening and not initial:
+            self.capture.stop()
+        self.devices = audio.list_input_devices(refresh=not initial)
+        labels = [d.label() for d in self.devices] or ["(no input devices)"]
+        self.input_combo.configure(values=labels)
+        dev = audio.find_device(self.devices, self.settings["input_device"]) or audio.default_device(self.devices)
+        self.input_var.set(dev.label() if dev else labels[0])
+        if was_listening and not initial:
+            self._start_capture()
+
+    def current_device(self) -> Optional[audio.InputDevice]:
+        label = self.input_var.get()
+        for d in self.devices:
+            if d.label() == label:
+                return d
+        return None
+
+    def _on_device_selected(self) -> None:
+        dev = self.current_device()
+        if dev is None:
+            return
+        self.settings["input_device"] = dev.key()
+        if self.listening:
+            self._start_capture()
+
+    def refresh_displays(self, initial: bool = False) -> None:
+        self.displays = displays.list_displays(self.root)
+        self.display_combo.configure(values=[d.label() for d in self.displays])
+        current = None
+        if initial:
+            current = displays.find_saved(self.displays, self.settings["output_display"])
+        elif self.display is not None:
+            current = displays.find_saved(self.displays, self.display.key())
+        if current is None:
+            current = displays.default_display(self.displays)
+        self._use_display(current)
+
+    def _use_display(self, d: displays.Display) -> None:
+        self.display = d
+        self.display_var.set(d.label())
+        self.settings["output_display"] = d.key()
+        only_one = len(self.displays) == 1
+        # one screen: a windowed preview instead of covering the operator window
+        self.output.place(d, fullscreen=not only_one)
+        self._resize_thumbs(self.preview_canvas.master.winfo_width())
+
+    def _on_display_selected(self) -> None:
+        label = self.display_var.get()
+        for d in self.displays:
+            if d.label() == label:
+                self._use_display(d)
+                return
+
+    def _displays_changed(self) -> bool:
+        """Cheap periodic check (Windows/macOS) for plugged/unplugged screens."""
+        if sys.platform not in ("win32", "darwin"):
+            return False
+        now = displays.list_displays(self.root)
+        return [d.key() for d in now] != [d.key() for d in self.displays]
+
+    # --------------------------------------------------------------- listen
+    def toggle_listen(self) -> None:
+        if self.listening:
+            self.stop_listening()
+        else:
+            self.start_listening()
+
+    def start_listening(self) -> None:
+        if self.engine.state in ("missing", "error"):
+            self._status("No speech model — see the yellow banner", error=True)
+            return
+        if not audio.available():
+            self._status("Audio unavailable", error=True)
+            return
+        self.listening = True
+        self.engine.start()
+        self._start_capture()
+        self._update_listen_ui()
+
+    def _start_capture(self) -> bool:
+        """Open the selected device in the background; the result arrives as an "audio" event."""
+        dev = self.current_device()
+        if dev is None:
+            self._status("No input device selected", error=True)
+            self.audio_retry_at = time.monotonic() + 3
+            return False
+        self.audio_retry_at = 0.0
+        self._status("Opening %s\u2026" % dev.name)
+        self.capture.start_async(dev, lambda ok, msg: self.events.put(("audio", ok, msg)))
+        return True
+
+    def _on_audio(self, ok: bool, msg: str) -> None:
+        if not self.listening:
+            if ok:
+                self.capture.stop()
+            return
+        if ok:
+            dev = self.current_device()
+            if dev is not None:
+                self.settings["input_device"] = dev.key()
+            self.audio_retry_at = 0.0
+            self._update_listen_ui()
+            return
+        log.warning("audio: %s", msg)
+        if self.capture.opening:
+            # still blocked inside PortAudio: keep waiting rather than piling up threads
+            self._status(msg, error=True)
+        else:
+            self._status("Cannot open audio: %s \u2014 retrying\u2026" % msg, error=True)
+            self.audio_retry_at = time.monotonic() + 3
+
+    def stop_listening(self) -> None:
+        self.listening = False
+        self.capture.stop()
+        self.engine.stop()
+        self.audio_retry_at = 0.0
+        self._clear_partial()
+        self._update_listen_ui()
+
+    def _update_listen_ui(self) -> None:
+        if self.listening:
+            self.listen_dot.configure(foreground="#e01010")
+            self.listen_btn.configure(text="Stop")
+            if self.engine.state == "loading":
+                self._status("Loading speech model…")
+            elif self.capture.running:
+                self._status("Listening")
+            elif self.capture.opening:
+                self._status("Opening audio device\u2026")
+        else:
+            self.listen_dot.configure(foreground="#888888")
+            self.listen_btn.configure(text="Listen")
+            self._status({"loading": "Loading speech model…", "missing": "No speech model",
+                          "error": "Speech model failed to load"}.get(self.engine.state, "Idle"),
+                         error=self.engine.state in ("missing", "error"))
+
+    def _audio_watchdog(self) -> None:
+        if not self.listening:
+            return
+        if self.capture.running and not self.capture.healthy():
+            msg = self.capture.error or "audio stopped"
+            log.warning("audio problem: %s", msg)
+            self.capture.stop()
+            self._status("Audio lost: %s — retrying…" % msg, error=True)
+            self.audio_retry_at = time.monotonic() + 3
+        elif (not self.capture.running and not self.capture.opening and self.audio_retry_at
+              and time.monotonic() >= self.audio_retry_at):
+            # re-scan (hot-plug) and reopen the same device by name + host API
+            saved = self.settings["input_device"]
+            self.devices = audio.list_input_devices(refresh=True)
+            self.input_combo.configure(values=[d.label() for d in self.devices] or ["(no input devices)"])
+            dev = audio.find_device(self.devices, saved)
+            if dev is not None:
+                self.input_var.set(dev.label())
+                self._start_capture()
+            else:
+                self.audio_retry_at = time.monotonic() + 3
+
+    # ----------------------------------------------------------- events
+    def _poll(self) -> None:
+        if self._closing:
+            return
+        try:
+            for _ in range(200):
+                try:
+                    ev = self.events.get_nowait()
+                except queue.Empty:
+                    break
+                self._handle(ev)
+            self._draw_meter()
+            self._tick += 1
+            if self._tick % 20 == 0:
+                self._audio_watchdog()
+                self._prune_transcript()
+            if self._tick % 100 == 0 and self._displays_changed():
+                log.info("display configuration changed")
+                self.refresh_displays()
+        except Exception:
+            log.exception("poll error")
+        self.root.after(POLL_MS, self._poll)
+
+    def _handle(self, ev) -> None:
+        kind = ev[0]
+        if kind == "partial":
+            self._set_partial(ev[1])
+        elif kind == "final":
+            self._add_final(ev[1])
+        elif kind == "detect":
+            self._on_detection(ev[1], ev[2])
+        elif kind == "model":
+            self._on_model(ev[1], ev[2])
+        elif kind == "audio":
+            self._on_audio(ev[1], ev[2])
+        elif kind == "error":
+            self._status(ev[1], error=True)
+
+    def _on_model(self, state: str, detail: str) -> None:
+        if state == "missing":
+            self._set_banner(
+                "No speech model found, so listening is off. Manual search and projection still work.\n"
+                "To fix: put the vosk-model-small-en-us-0.15 folder into a 'models' folder next to %s, or use "
+                "Settings → Speech → Choose speech model folder… (see the User Guide)." % APP_NAME)
+        elif state == "error":
+            self._set_banner("The speech model could not be loaded: %s\nChoose another model folder in "
+                             "Settings → Speech." % detail)
+        else:
+            self._set_banner("")
+        if state == "ready":
+            log.info("speech model ready: %s", detail)
+        self._update_listen_ui()
+
+    def _set_banner(self, text: str) -> None:
+        if text:
+            self.banner.configure(text=text)
+            if not self.banner.winfo_ismapped():
+                self.banner.pack(fill="x", pady=(0, 4), before=self.banner_anchor)
+        else:
+            self.banner.pack_forget()
+
+    def _status(self, text: str, error: bool = False) -> None:
+        self.status_var.set(text)
+        self.status_label.configure(foreground="#c00000" if error else self._status_fg)
+
+    # transcript
+    def _insert_transcript(self, fn) -> None:
+        t = self.transcript
+        at_end = t.yview()[1] >= 0.999
+        t.configure(state="normal")
+        fn(t)
+        t.configure(state="disabled")
+        if at_end:
+            t.see("end")
+
+    def _clear_partial(self) -> None:
+        def f(t):
+            ranges = t.tag_ranges("partial")
+            if ranges:
+                t.delete(ranges[0], ranges[-1])
+        self._insert_transcript(f)
+
+    def _set_partial(self, text: str) -> None:
+        def f(t):
+            ranges = t.tag_ranges("partial")
+            if ranges:
+                t.delete(ranges[0], ranges[-1])
+            if text:
+                t.insert("end", text, "partial")
+        self._insert_transcript(f)
+
+    def _add_final(self, text: str) -> None:
+        def f(t):
+            ranges = t.tag_ranges("partial")
+            if ranges:
+                t.delete(ranges[0], ranges[-1])
+            t.insert("end", time.strftime("%H:%M:%S "), "time")
+            t.insert("end", text + "\n")
+        self._insert_transcript(f)
+        self._transcript_lines.append(time.monotonic())
+
+    def _prune_transcript(self) -> None:
+        cutoff = time.monotonic() - TRANSCRIPT_SECONDS
+        n = 0
+        while self._transcript_lines and self._transcript_lines[0] < cutoff:
+            self._transcript_lines.pop(0)
+            n += 1
+        if n:
+            def f(t):
+                t.delete("1.0", "%d.0" % (n + 1))
+            self._insert_transcript(f)
+
+    # detections
+    def _on_detection(self, kind: str, det) -> None:
+        ref = det.ref
+        sel = Selection.from_reference(ref)
+        label = sel.passage_label() + ("  (relative)" if ref.relative else "")
+        iid = str(det.id)
+        values = (time.strftime("%H:%M:%S", time.localtime(det.wall_time)), label, det.snippet)
+        if kind == NEW or not self.detected.exists(iid):
+            self.detected.insert("", 0, iid=iid, values=values)
+            children = self.detected.get_children()
+            for old in children[200:]:
+                self.detected.delete(old)
+                self._detections.pop(old, None)
+        else:
+            self.detected.item(iid, values=values)
+            self.detected.move(iid, "", 0)
+        self._detections[iid] = sel
+        log.info("detected %s (%s): %r", label, kind, det.snippet)
+        auto_ok = self.mode_var.get() == "auto" and (ref.explicit_verse or not self.settings["auto_requires_verse"])
+        if auto_ok:
+            self.set_preview(sel.copy())
+            self.go_live()
+        else:
+            self.set_preview(sel.copy())
+
+    def _on_detection_click(self) -> None:
+        sel = self.detected.selection()
+        if sel and sel[0] in self._detections:
+            self.set_preview(self._detections[sel[0]].copy())
+
+    def _on_detection_double(self) -> None:
+        self._on_detection_click()
+        self.go_live()
+
+    # ----------------------------------------------------------- preview / live
+    def translation(self) -> str:
+        return self.translation_var.get() or self.bible.default_translation()
+
+    def _fits(self, text: str) -> bool:
+        w, h = self.output.size
+        return self.renderer.fits(text, self.settings.appearance, w, h)
+
+    def set_preview(self, sel: Optional[Selection]) -> None:
+        self.preview = sel
+        self._render_preview()
+
+    def go_live(self) -> None:
+        if self.preview is None:
+            return
+        self.live.selection = self.preview.copy()
+        self.live.cover = None
+        self._render_live()
+
+    def blank(self) -> None:
+        self.live.toggle_cover(BLANK)
+        self._render_live()
+
+    def black(self) -> None:
+        self.live.toggle_cover(BLACK)
+        self._render_live()
+
+    def step(self, delta: int, live: Optional[bool] = None) -> None:
+        """Prev/Next: the live verse when something is live, otherwise the preview."""
+        use_live = live if live is not None else self.live.selection is not None
+        if use_live and self.live.selection is not None:
+            nxt = step(self.bible, self.live.selection, delta)
+            if nxt is not None:
+                self.live.selection = nxt
+                self.live.cover = None
+                self._render_live()
+        elif self.preview is not None:
+            nxt = step(self.bible, self.preview, delta)
+            if nxt is not None:
+                self.set_preview(nxt)
+
+    def _render_preview(self) -> None:
+        tr = self.translation()
+        slide = self.builder.slide(self.preview, tr, self.settings["fit_range"], self._fits)
+        self._preview_slide = slide
+        self.preview_label.configure(text=self.preview.status_label() if self.preview else "—")
+        self._draw_thumb(self.preview_canvas, slide)
+
+    def _render_live(self) -> None:
+        tr = self.translation()
+        slide = self.live.slide(self.builder, tr, self.settings["fit_range"], self._fits)
+        self._live_slide = slide
+        self.output.set_slide(slide, tr)
+        if self.live.cover == BLACK:
+            text = "BLACK"
+        elif self.live.cover == BLANK:
+            text = "BLANK"
+        else:
+            text = self.live.selection.status_label() if self.live.selection else "—"
+        self.live_label.configure(text=text)
+        self._draw_thumb(self.live_canvas, slide)
+
+    def _render_all(self) -> None:
+        self._render_preview()
+        self._render_live()
+
+    def _render_thumbs(self) -> None:
+        if hasattr(self, "_preview_slide"):
+            self._draw_thumb(self.preview_canvas, self._preview_slide)
+        if hasattr(self, "_live_slide"):
+            self._draw_thumb(self.live_canvas, self._live_slide)
+
+    def _draw_thumb(self, canvas: tk.Canvas, slide: Slide) -> None:
+        try:
+            w = int(canvas.winfo_width()) - 4
+            h = int(canvas.cget("height"))
+            if w < 10:
+                w = 200
+            self.renderer.draw(canvas, slide if slide.kind != EMPTY else Slide(EMPTY), self.settings.appearance,
+                               w, h, design_size=self.output.size, translation=self.translation())
+            canvas.configure(scrollregion=(0, 0, w, h))
+        except tk.TclError:
+            log.exception("thumbnail draw failed")
+
+    # --------------------------------------------------------------- search
+    def focus_search(self) -> None:
+        self.search_entry.focus_set()
+        self.search_entry.select_range(0, "end")
+
+    def search(self) -> None:
+        text = self.search_var.get().strip()
+        self.results.delete(*self.results.get_children())
+        self._results = {}
+        if not text:
+            return
+        tr = self.translation()
+        ref = parse_typed(text, verse_count=self.bible.verse_count)
+        if ref is not None:
+            sel = Selection.from_reference(ref)
+            self._add_result(sel, self.bible.verse(tr, sel.book, sel.chapter, sel.cur) or "")
+            self.set_preview(sel)
+            self.search_info.configure(text="Reference %s loaded into Preview" % sel.passage_label())
+            return
+        t = time.perf_counter()
+        found = self.bible.search(tr, text, limit=50)
+        for v in found:
+            self._add_result(Selection(v.book, v.chapter, v.verse, v.verse), v.text)
+        self.search_info.configure(text="%d result%s in %s (%.0f ms)%s" % (
+            len(found), "" if len(found) == 1 else "s", tr, (time.perf_counter() - t) * 1000,
+            " — showing the first 50" if len(found) >= 50 else ""))
+        kids = self.results.get_children()
+        if kids:
+            self.results.selection_set(kids[0])
+
+    def _add_result(self, sel: Selection, text: str) -> None:
+        iid = self.results.insert("", "end", values=(sel.passage_label(), text))
+        self._results[iid] = sel
+
+    def _on_result_click(self) -> None:
+        sel = self.results.selection()
+        if sel and sel[0] in self._results:
+            self.set_preview(self._results[sel[0]].copy())
+
+    # --------------------------------------------------------------- misc ui
+    def _on_translation(self) -> None:
+        self.settings["translation"] = self.translation()
+        self._update_translation_name()
+        self._render_all()
+
+    def _update_translation_name(self) -> None:
+        names = {c: n for c, n, _ in self.bible.translations()}
+        self.translation_name.configure(text=names.get(self.translation(), ""))
+
+    def _on_mode(self) -> None:
+        self.settings["mode"] = self.mode_var.get()
+        self._update_mode_hint()
+
+    def toggle_mode(self) -> None:
+        self.mode_var.set("auto" if self.mode_var.get() == "manual" else "manual")
+        self._on_mode()
+
+    def _update_mode_hint(self) -> None:
+        if self.mode_var.get() == "auto":
+            self.mode_hint.configure(text="Auto: detected verses go straight to Live", foreground="#b00020")
+        else:
+            self.mode_hint.configure(text="Manual: detected verses go to Preview; press Go Live (%s+Enter / F5)"
+                                     % MOD_LABEL, foreground="#666666")
+
+    def toggle_output(self) -> None:
+        self.output.toggle()
+
+    def _on_output_visible(self, visible: bool) -> None:
+        self.settings["output_visible"] = visible
+        self.output_btn.configure(text="Hide output" if visible else "Show output")
+
+    def test_output(self) -> None:
+        if not self.output.visible:
+            self.output.show()
+        self.set_preview(SAMPLE.copy())
+        self.go_live()
+
+    def _draw_meter(self) -> None:
+        level = self.capture.level() if self.capture.running else 0.0
+        c = self.meter
+        w = int(c.cget("width"))
+        h = int(c.cget("height"))
+        c.delete("bar")
+        fill = int(w * level / 100.0)
+        if fill > 0:
+            color = "#2fbf3a" if level < 75 else ("#e0c020" if level < 92 else "#e03030")
+            c.create_rectangle(0, 0, fill, h, fill=color, width=0, tags="bar")
+
+    def open_settings(self) -> None:
+        from .ui_settings import SettingsDialog
+        SettingsDialog(self)
+
+    def apply_settings(self) -> None:
+        """Called by the settings dialog after a change."""
+        s = self.settings
+        self.detector.strict = s["strict_books"]
+        self.detector.relative = s["relative_verses"]
+        self.detector.dedupe_window = float(s["dedupe_window"])
+        self.output.set_appearance(s.appearance)
+        self._render_all()
+        s.save()
+
+    def reload_model(self) -> None:
+        if self.listening:
+            self.stop_listening()
+        self.engine.model = None
+        self.engine.load(self.settings["model_path"] or None)
+
+    def show_shortcuts(self) -> None:
+        messagebox.showinfo("Keyboard shortcuts", "\n".join([
+            "%s+Enter or F5\tGo Live" % MOD_LABEL,
+            "Esc\t\tBlank (again to restore)",
+            "Shift+Esc\tBlack (again to restore)",
+            "← / →\t\tPrev / Next on the live slide",
+            "%s+F\t\tFocus search" % MOD_LABEL,
+            "%s+L\t\tListen on/off" % MOD_LABEL,
+            "%s+M\t\tManual / Auto" % MOD_LABEL,
+            "F11 (on output)\tFull screen / windowed",
+        ]), parent=self.root)
+
+    def show_about(self) -> None:
+        names = ", ".join(c for c, _, _ in self.bible.translations())
+        messagebox.showinfo("About %s" % APP_NAME, "%s %s\n\nFree, offline Bible verse projection from live "
+                            "speech.\n\nTranslations: %s\nSpeech model: %s\n\nMIT licence. See "
+                            "THIRD_PARTY_NOTICES.md for components and licences." % (
+                                APP_NAME, __version__, names, self.engine.model_path or "none"),
+                            parent=self.root)
+
+    def open_log_folder(self) -> None:
+        folder = paths.log_dir()
+        try:
+            if sys.platform == "win32":
+                os.startfile(folder)  # type: ignore[attr-defined]
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", folder])
+            else:
+                subprocess.Popen(["xdg-open", folder])
+        except Exception:
+            messagebox.showinfo("Log folder", folder, parent=self.root)
+
+    # --------------------------------------------------------------- close
+    def close(self) -> None:
+        if self._closing:
+            return
+        self._closing = True
+        log.info("closing")
+        try:
+            if self.root.state() == "normal":
+                self.settings["window_geometry"] = self.root.geometry()
+        except tk.TclError:
+            pass
+        self.settings["mode"] = self.mode_var.get()
+        self.settings["translation"] = self.translation()
+        try:
+            self.capture.stop()
+            self.engine.stop()
+        except Exception:
+            log.exception("stopping audio")
+        self.settings.save()
+        self.output.destroy()
+        self.root.destroy()
