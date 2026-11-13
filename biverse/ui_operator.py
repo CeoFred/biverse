@@ -68,6 +68,7 @@ class OperatorWindow(object):
         self.engine = SpeechEngine(self.events, self.detector)
         self.engine.use_reference = settings["reference_recognizer"]
         self.engine.commands = settings["voice_commands"]
+        self.engine.translations = [(c, n) for c, n, _l in bible.translations()]
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
         from .follow import ReadingFollower
@@ -719,6 +720,9 @@ class OperatorWindow(object):
         self._last_command = (intent, channel, t)
         label = intent.label()
         log.info("voice intent %s (%s): %r", label, channel, heard)
+        if intent.kind == commands.TRANSLATION:
+            self._voice_translation(intent)
+            return
         if intent.kind in (commands.STOP, commands.RESUME):
             self.set_following(intent.kind == commands.RESUME, source="voice")
             return
@@ -738,6 +742,20 @@ class OperatorWindow(object):
         else:
             self.set_preview(new)
             self._status("Voice: %s \u2192 %s in Preview (press Go Live)" % (label, new.verse_label()))
+
+    def _voice_translation(self, intent) -> None:
+        """"Let's read this in the ASV": switch the Bible version (stays until changed)."""
+        if not intent.code:
+            have = ", ".join(c for c, _n, _l in self.bible.translations())
+            self._status("Heard a request for the %s, which is not installed (installed: %s)" % (intent.where, have),
+                         error=True)
+            return
+        if intent.code == self.translation():
+            self._status("Already showing the %s" % intent.code)
+            return
+        self.translation_var.set(intent.code)
+        self._on_translation()
+        self._status("Voice: switched to %s" % intent.code)
 
     def _navigate(self, base: Selection, intent) -> Optional[Selection]:
         if intent.kind == commands.STEP:

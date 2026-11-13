@@ -353,3 +353,16 @@ def test_blank_screen_is_not_followed(op, bible):
     _read_aloud(op, bible.verse("KJV", 43, 3, 16))
     op.blank()
     assert op.live.selection.verse_label() == "John 3:16"
+
+
+def test_voice_switches_translation_until_changed(op, bible):
+    _show(op, "gen 1:3")
+    from biverse.commands import parse_intent
+    intent = parse_intent("let's read this in Young's Literal", op.engine.translations)
+    op._on_command(intent, "main", 1.0, "let's read this in Young's Literal")
+    assert op.translation() == "YLT" and "Let light be" in op.output.slide.text
+    op.step(1)  # stays switched for the next verse and chapter
+    assert op.translation() == "YLT"
+    intent = parse_intent("show it in the NIV", op.engine.translations)
+    op._on_command(intent, "main", 5.0, "show it in the NIV")
+    assert op.translation() == "YLT" and "not installed" in op.status_var.get()

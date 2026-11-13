@@ -651,6 +651,7 @@ class SpeechEngine(object):
         self._load_token = 0
         self._use_reference = True
         self.commands = True  # spoken "next verse", "go back"...
+        self.translations = []  # installed (code, name): "let's read this in the ASV"
 
     @property
     def model_path(self) -> Optional[str]:
@@ -791,6 +792,6 @@ class SpeechEngine(object):
     def _command(self, text: str, channel: str) -> None:
         if not self.commands:
             return
-        intent = parse_intent(text)
+        intent = parse_intent(text, self.translations)
         if intent is not None:
             self.events.put(("command", intent, channel, time.monotonic(), text))

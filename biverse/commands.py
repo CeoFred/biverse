@@ -20,12 +20,13 @@ complaining"), so every rule needs either a scripture unit (verse, chapter,
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 
 STEP = "step"
 GOTO = "goto"
 STOP = "stop"
 RESUME = "resume"
+TRANSLATION = "translation"
 
 VERSE = "verse"
 CHAPTER = "chapter"
@@ -40,10 +41,11 @@ LABELS = {NEXT_VERSE: "next verse", PREV_VERSE: "previous verse",
 
 
 class Intent(object):
-    __slots__ = ("kind", "unit", "delta", "chapter", "verse", "where")
+    __slots__ = ("kind", "unit", "delta", "chapter", "verse", "where", "code")
 
     def __init__(self, kind: str, unit: str = VERSE, delta: int = 0, chapter: Optional[int] = None,
-                 verse: Optional[int] = None, where: str = "") -> None:
+                 verse: Optional[int] = None, where: str = "", code: str = "") -> None:
+        self.code = code  # translation code for TRANSLATION ("" if not installed; see where)
         self.kind = kind
         self.unit = unit
         self.delta = delta
@@ -52,7 +54,7 @@ class Intent(object):
         self.where = where  # "chapter_start" | "passage_start" for goto
 
     def key(self):
-        return (self.kind, self.unit, self.delta, self.chapter, self.verse, self.where)
+        return (self.kind, self.unit, self.delta, self.chapter, self.verse, self.where, self.code)
 
     def __eq__(self, other):
         return isinstance(other, Intent) and self.key() == other.key()
@@ -73,6 +75,8 @@ class Intent(object):
                 return "start of the passage"
             return "chapter %d" % self.chapter if self.verse is None else "chapter %d verse %d" % (
                 self.chapter, self.verse)
+        if self.kind == TRANSLATION:
+            return "switch to %s" % (self.code or self.where)
         return {STOP: "stop following", RESUME: "continue following"}.get(self.kind, self.kind)
 
     def __repr__(self):  # pragma: no cover
@@ -136,12 +140,20 @@ def _has(joined: str, phrases) -> bool:
     return any(" %s " % p in joined for p in phrases)
 
 
-def parse_intent(text: str) -> Optional[Intent]:
-    """The navigation intent in ``text``, or None."""
+def parse_intent(text: str, translations: Optional[Sequence[Tuple[str, str]]] = None) -> Optional[Intent]:
+    """The navigation intent in ``text``, or None.
+
+    ``translations`` lists the installed ``(code, name)`` pairs, so a request for
+    one of them ("let's read this in the ASV") becomes a TRANSLATION intent.
+    """
     w = _words(text)
     if not w:
         return None
     joined = " " + " ".join(w) + " "
+
+    tr = _translation_intent(w, translations or ())
+    if tr is not None:
+        return tr
 
     # stop / continue following ---------------------------------------------------
     if any(_tail_ok(w, p, 1) for p in _STOP_PHRASES):
@@ -219,6 +231,87 @@ def parse_intent(text: str) -> Optional[Intent]:
         return Intent(STEP, delta=_BARE[core[0]])
     if len(w) <= MAX_BARE_WORDS and core in (["back", "up"], ["go", "back"]):
         return Intent(STEP, delta=-1)
+    return None
+
+
+# ------------------------------------------------------------- Bible versions
+
+# Spoken names of well-known translations. Installed ones switch; the others get a
+# "not installed" message instead of silently doing nothing.
+KNOWN_VERSIONS = [
+    ("KJV", ["king james", "king james version", "authorized version", "authorised version", "kjv"]),
+    ("ASV", ["american standard", "american standard version", "asv"]),
+    ("YLT", ["youngs literal", "young literal", "youngs literal translation", "ylt"]),
+    ("BBE", ["basic english", "bible in basic english", "bbe"]),
+    ("WEB", ["world english", "world english bible"]),
+    ("NKJV", ["new king james", "new king james version", "nkjv"]),
+    ("NIV", ["new international", "new international version", "niv"]),
+    ("ESV", ["english standard", "english standard version", "esv"]),
+    ("NLT", ["new living", "new living translation", "nlt"]),
+    ("NASB", ["new american standard", "nasb"]),
+    ("AMP", ["amplified", "amplified bible", "amplified version"]),
+    ("MSG", ["the message bible", "message bible"]),
+    ("RSV", ["revised standard", "revised standard version", "rsv"]),
+    ("NRSV", ["new revised standard", "nrsv"]),
+    ("CSB", ["christian standard", "christian standard bible", "csb"]),
+    ("GNT", ["good news", "good news translation", "good news bible"]),
+]
+_SWITCH = {"switch", "change", "use", "show", "display", "put", "give", "project"}
+_TR_TAIL = {"version", "translation", "bible", "please", "now", "instead", "for", "us", "me", "it", "this", "that"}
+
+
+def _join_letters(words: List[str]) -> List[str]:
+    """"k j v" -> "kjv" (recognisers spell abbreviations letter by letter)."""
+    out = []
+    run = []
+    for x in words + [""]:
+        if len(x) == 1 and x.isalpha() and x not in ("a", "i"):
+            run.append(x)
+            continue
+        if len(run) >= 2:
+            out.append("".join(run))
+        else:
+            out.extend(run)
+        run = []
+        if x:
+            out.append(x)
+    return out
+
+
+def _translation_intent(words: List[str], installed: Sequence[Tuple[str, str]]) -> Optional[Intent]:
+    w = _join_letters(words)
+    names = []  # (name words, code, installed?)
+    have = {c.upper() for c, _n in installed}
+    for code, spoken in KNOWN_VERSIONS:
+        for nm in spoken:
+            names.append((nm.split(), code))
+    for code, name in installed:
+        names.append(([code.lower()], code.upper()))
+        n = re.sub(r"\(.*?\)", "", name.lower())
+        n = re.sub(r"[^a-z\s]", " ", n).split()
+        if len(n) >= 2:
+            names.append((n, code.upper()))
+    names.sort(key=lambda x: -len(x[0]))  # longest first: "new king james" before "king james"
+    for i in range(len(w)):
+        for nm, code in names:
+            if w[i:i + len(nm)] != nm:
+                continue
+            before = w[:i]
+            after = [x for x in w[i + len(nm):]]
+            short = len([x for x in before + after if x not in _FILLER and x not in _TR_TAIL
+                         and x not in ("in", "the", "from", "with", "of")]) == 0
+            asked = (any(x in _SWITCH for x in before)
+                     or re.search(r"(?:^| )(?:lets|let us|can we|could we|please|now|we will|well) "
+                                  r"(?:read|see|have|look at)\b", " ".join(before)) is not None
+                     # an instruction starting with "read", not "as we read in the King James"
+                     or re.match(r"^(?:(?:ok|okay|now|so|please|and|brother|sister|pastor|media) )*"
+                                 r"read (?:it |this |that |the verse |the passage |the chapter |verse \d+ )?"
+                                 r"(?:again )?(?:in|from)(?: the)?$", " ".join(before)) is not None)
+            if not (short or asked):
+                return None  # "the King James version says..." is a quotation, not a request
+            if code in have:
+                return Intent(TRANSLATION, code=code)
+            return Intent(TRANSLATION, code="", where=code)
     return None
 
 
