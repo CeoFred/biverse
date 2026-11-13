@@ -40,6 +40,7 @@ DEFAULTS = {
     "relative_verses": True,
     "dedupe_window": 60,
     "auto_requires_verse": True,    # auto mode only sends chapter AND verse live
+    "voice_commands": True,         # spoken "next verse", "go back", "next chapter"
     "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
 }  # type: Dict[str, Any]
 
@@ -70,7 +71,7 @@ def _merge(defaults: Dict[str, Any], loaded: Any) -> Dict[str, Any]:
 def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
     if data["mode"] not in ("manual", "auto"):
         data["mode"] = "manual"
-    if data["speech_model"] not in ("auto", "kroko", "parakeet", "vosk-small", "custom"):
+    if data["speech_model"] not in ("auto", "both", "kroko", "parakeet", "vosk-small", "custom"):
         data["speech_model"] = "auto"
     if not 0 <= data["dedupe_window"] <= 3600:
         data["dedupe_window"] = DEFAULTS["dedupe_window"]

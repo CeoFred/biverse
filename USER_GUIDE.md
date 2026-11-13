@@ -168,8 +168,27 @@ In **Detected**, click an entry to preview it again, or double-click it to send 
 - Ranges: "First Corinthians thirteen four through seven", "verses four to seven"
 - Whole chapters: "Romans chapter eight". This shows verse 1, and you can step on with Next.
 - "Psalm one nineteen" is understood as Psalm 119.
-- Relative verses: after John 3:16, "now look at verse eighteen" means John 3:18. The entry
-  in Detected is marked *(relative)*.
+- "Job one twenty" or "Job 120" is understood as Job 1:20, and "John 316" as John 3:16, unless
+  a quantity follows ("my job 365 days a year" is ignored).
+- Relative verses: after John 3:16, "now look at verse eighteen" or "move to verse eight"
+  means a verse in the chapter **currently on screen**, even after you or the preacher moved
+  on with Next. The entry in Detected is marked *(relative)*.
+
+**Voice commands** (Settings → Detection, on by default). The preacher can move the slide by
+voice:
+
+| Say | What happens |
+|---|---|
+| "next verse", "the following verse", or just "Next." | next verse |
+| "go back", "previous verse", "go back a verse" | previous verse |
+| "next chapter", "move to the next chapter" | verse 1 of the next chapter |
+| "previous chapter", "go back a chapter" | verse 1 of the previous chapter |
+| "move to verse eight", "verse eight" | verse 8 of the chapter on screen |
+
+In **Auto** mode the projector changes straight away. In **Manual** mode the new verse goes to
+Preview for you to send live. "Next" and "go back" on their own only count when said as a short
+command, so "next week we have a retreat" or "go back to Egypt" do nothing. The Status line
+shows each command BiVerse heard.
 - Names that are also everyday words (Mark, John, Job, Acts, James, Jude, Ruth, Joel, Amos,
   Titus, Numbers, Judges) only count with a chapter **and** a verse, or with the word
   "chapter". So "I lost my job three years ago" is ignored, but "Job nineteen twenty five" is
@@ -249,6 +268,7 @@ BiVerse can use three speech models. **Settings → Speech** shows which one is 
 | Model | Best for | Needs |
 |---|---|---|
 | **Kroko** (built in) | Every computer. Words appear live as the preacher speaks. | Any computer |
+| **Kroko + Parakeet** (with the pack) | The most detections: Kroko reacts live, Parakeet re-checks each phrase at the pause. Chosen automatically when the computer can run it. | About 2 GB of free RAM |
 | **Parakeet** (free model pack) | The most accurate, by far the best with African and other accents. The verse appears a moment after the preacher pauses. | A 64-bit computer with about 6 GB of RAM or more |
 | **Classic** (Vosk, Windows 7/8 downloads only) | Old Windows 7 computers where Kroko cannot run | Any computer |
 

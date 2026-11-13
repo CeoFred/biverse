@@ -120,9 +120,14 @@ def tokenize(text, mode="speech"):
     if mode == "typed":
         text = _clean_typed(text)
     else:
-        # Neural recognisers (Kroko, Parakeet) write "Genesis 2:18" or "verses 4-7".
+        # Neural recognisers (Kroko, Parakeet) write "Genesis 2:18", "John 3:16-18" or
+        # "verses 4-7" (ranges), but also "Habakkuk 2-4" for the spoken "habakkuk two
+        # four" (chapter 2 verse 4). A dash is a range only after "C:V" or "verse(s) N".
+        dash = u"[%s]" % _DASHES
+        text = re.sub(u"(\\d+)\\s*:\\s*(\\d+)\\s*%s\\s*(?=\\d)" % dash, r"\1 : \2 to ", text)
+        text = re.sub(u"(verses?\\s+\\d+)\\s*%s\\s*(?=\\d)" % dash, r"\1 to ", text)
+        text = re.sub(u"(\\d)\\s*%s\\s*(?=\\d)" % dash, r"\1 ", text)
         text = re.sub(r"(\d)\s*[:.]\s*(?=\d)", r"\1 : ", text)
-        text = re.sub(u"(\\d)\\s*[%s]\\s*(?=\\d)" % _DASHES, r"\1 to ", text)
         text = re.sub(r"(?<=[a-z])(?=\d)", " ", text)
     text = text.replace("'", "")
     # Keep ":" tokens (typed separator); drop everything else that is not a word.

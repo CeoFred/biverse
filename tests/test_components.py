@@ -176,3 +176,13 @@ def test_slide_for_missing_verse(bible):
     # Matthew 17:21 is not in the ASV
     slide = SlideBuilder(bible).slide(Selection(40, 17, 21, 21), "ASV")
     assert "not included in the ASV" in slide.text
+
+
+def test_chapter_step(bible):
+    from versecast.controller import Selection, chapter_step
+    assert chapter_step(bible, Selection(43, 3, 16, 16), 1).verse_label() == "John 4:1"
+    assert chapter_step(bible, Selection(43, 3, 16, 16), -1).verse_label() == "John 2:1"
+    assert chapter_step(bible, Selection(1, 50, 3, 3), 1).verse_label() == "Exodus 1:1"
+    assert chapter_step(bible, Selection(2, 1, 3, 3), -1).verse_label() == "Genesis 50:1"
+    assert chapter_step(bible, Selection(66, 22, 1, 1), 1) is None
+    assert chapter_step(bible, Selection(1, 1, 5, 5), -1) is None

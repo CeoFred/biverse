@@ -96,7 +96,7 @@ BOOKS = [
          ("eccl", "ecc", "eccles", "ec", "qoh")),
     Book(22, "SNG", "Song of Solomon",
          ("song of solomon", "song of songs", "songs of solomon", "songs of songs",
-          "song of soloman", "song of salomon", "canticles"),
+          "song of soloman", "song of salomon", "canticles", "psalm of solomon", "psalms of solomon"),
          ("song", "sos", "sng", "ss", "cant", "song of sol")),
     Book(23, "ISA", "Isaiah", ("isaiah", "isaiahs", "isaiah's", "isaya"), ("isa", "is")),
     Book(24, "JER", "Jeremiah", ("jeremiah", "jeremiahs"), ("jer", "je", "jr")),
@@ -211,3 +211,53 @@ def match_book(tokens, i, typed=False):
 
 def get(number):
     return BY_NUMBER[number]
+
+
+# -- fuzzy matching (speech only) -------------------------------------------------
+
+_FUZZY_NAMES = sorted({("".join(k), book) for k, (book, _strict) in SPOKEN_INDEX.items()
+                       if not any(t.isdigit() for t in k) and len("".join(k)) >= 4},
+                      key=lambda x: x[0])
+_COMMON = frozenset("""the and with turn me to that this there their these those then than them they what when
+where which while who whom whose will would shall should could have has had was were are is be been being
+for from into onto upon over under about after before chapter verse verses please open read let us our
+your you yours his her its it not now nation nations matter mother father brother sister people""".split())
+
+
+def fuzzy_match_book(tokens, i, min_ratio=0.75, margin=0.08):
+    """A recogniser's near-miss spelling of a book name at ``tokens[i]``.
+
+    Neural recognisers often get the shape of a rare name almost right
+    ("Habakku", "Nebamiah", "Pileman", "Zephynia"). Compares 1-3 joined tokens
+    with every spoken name and returns ``(book, n_tokens)`` when one name is
+    clearly the closest. Only called by the parser when a chapter-and-verse
+    structure follows, so ordinary words cannot become books.
+    """
+    import difflib
+    best = None
+    for length in (3, 2, 1):
+        if i + length > len(tokens):
+            continue
+        parts = tokens[i:i + length]
+        if any(not p.isalpha() for p in parts) or parts[0] in _COMMON:
+            continue
+        cand = "".join(parts)
+        if len(cand) < 5:  # "Ruke" could be Ruth or Luke: too short to guess
+            continue
+        scores = []
+        for name, book in _FUZZY_NAMES:
+            if abs(len(name) - len(cand)) > max(3, len(name) // 3):
+                continue
+            r = difflib.SequenceMatcher(None, cand, name).ratio()
+            scores.append((r, book.number, book, length))
+        if not scores:
+            continue
+        scores.sort(key=lambda x: -x[0])
+        top = scores[0]
+        runner = next((s for s in scores[1:] if s[1] != top[1]), None)
+        if top[0] >= min_ratio and (runner is None or top[0] - runner[0] >= margin):
+            if best is None or top[0] > best[0]:
+                best = top
+    if best is None:
+        return None
+    return best[2], best[3]

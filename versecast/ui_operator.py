@@ -15,7 +15,8 @@ from typing import Optional
 
 from . import APP_NAME, __version__, audio, displays, paths
 from .bible import Bible
-from .controller import LiveState, Selection, SlideBuilder, step
+from . import commands
+from .controller import LiveState, Selection, SlideBuilder, chapter_step, step
 from .detector import NEW, Detector
 from .parser import parse_typed
 from .recognizer import SpeechEngine
@@ -53,6 +54,7 @@ class OperatorWindow(object):
         self._detections = {}  # type: Dict[str, object]
         self._results = {}  # type: Dict[str, Selection]
         self._closing = False
+        self._last_command = None
 
         if not bible.has_translation(settings["translation"]):
             settings["translation"] = bible.default_translation()
@@ -62,6 +64,7 @@ class OperatorWindow(object):
                                  verse_count=bible.verse_count)
         self.engine = SpeechEngine(self.events, self.detector)
         self.engine.use_reference = settings["reference_recognizer"]
+        self.engine.commands = settings["voice_commands"]
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
@@ -532,6 +535,8 @@ class OperatorWindow(object):
             self._on_model(ev[1], ev[2])
         elif kind == "pack":
             self._on_pack(ev[1], ev[2])
+        elif kind == "command":
+            self._on_command(ev[1], ev[2], ev[3], ev[4])
         elif kind == "audio":
             self._on_audio(ev[1], ev[2])
         elif kind == "error":
@@ -656,7 +661,9 @@ class OperatorWindow(object):
             self.detected.move(iid, "", 0)
         self._detections[iid] = sel
         log.info("detected %s (%s): %r", label, kind, det.snippet)
-        auto_ok = self.mode_var.get() == "auto" and (ref.explicit_verse or not self.settings["auto_requires_verse"])
+        from .parser import AUTO_MIN_CONFIDENCE
+        auto_ok = (self.mode_var.get() == "auto" and ref.confidence >= AUTO_MIN_CONFIDENCE
+                   and (ref.explicit_verse or not self.settings["auto_requires_verse"]))
         if auto_ok:
             self.set_preview(sel.copy())
             self.go_live()
@@ -679,6 +686,35 @@ class OperatorWindow(object):
     def _fits(self, text: str) -> bool:
         w, h = self.output.size
         return self.renderer.fits(text, self.settings.appearance, w, h)
+
+    def _on_command(self, cmd: str, channel: str, t: float, heard: str) -> None:
+        """A spoken navigation command ("next verse", "go back", "next chapter")."""
+        last = self._last_command
+        # With both models running, Kroko and Parakeet each hear the same command.
+        if last and last[0] == cmd and last[1] != channel and t - last[2] < 3.0:
+            return
+        self._last_command = (cmd, channel, t)
+        base = self.live.selection or self.preview
+        label = commands.LABELS.get(cmd, cmd)
+        if base is None:
+            self._status("Heard \"%s\" but nothing is on screen" % label)
+            return
+        if cmd in (commands.NEXT_VERSE, commands.PREV_VERSE):
+            new = step(self.bible, base, 1 if cmd == commands.NEXT_VERSE else -1)
+        else:
+            new = chapter_step(self.bible, base, 1 if cmd == commands.NEXT_CHAPTER else -1)
+        if new is None:
+            self._status("Heard \"%s\" \u2014 already at the end" % label)
+            return
+        log.info("voice command %s (%s): %r -> %s", cmd, channel, heard, new.status_label())
+        if self.mode_var.get() == "auto":
+            self.live.selection = new
+            self.live.cover = None
+            self._render_live()
+            self._status("Voice: %s \u2192 %s (live)" % (label, new.verse_label()))
+        else:
+            self.set_preview(new)
+            self._status("Voice: %s \u2192 %s in Preview (press Go Live)" % (label, new.verse_label()))
 
     def set_preview(self, sel: Optional[Selection]) -> None:
         self.preview = sel
@@ -725,6 +761,9 @@ class OperatorWindow(object):
         slide = self.live.slide(self.builder, tr, self.settings["fit_range"], self._fits)
         self._live_slide = slide
         self.output.set_slide(slide, tr)
+        if self.live.selection is not None:
+            # "move to verse 8" now means verse 8 of what is on screen
+            self.detector.set_position(self.live.selection.book, self.live.selection.chapter)
         if self.live.cover == BLACK:
             text = "BLACK"
         elif self.live.cover == BLANK:
@@ -855,6 +894,7 @@ class OperatorWindow(object):
         self.detector.relative = s["relative_verses"]
         self.detector.dedupe_window = float(s["dedupe_window"])
         self.engine.use_reference = s["reference_recognizer"]
+        self.engine.commands = s["voice_commands"]
         self.output.set_appearance(s.appearance)
         self._render_all()
         s.save()

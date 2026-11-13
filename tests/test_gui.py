@@ -18,6 +18,9 @@ def op(bible, tmp_path):
     from versecast.ui_operator import OperatorWindow
     settings = Settings(str(tmp_path / "settings.json"))
     settings["output_visible"] = False
+    # Don't load real speech models (up to ~2 GB) in UI tests
+    settings["speech_model"] = "custom"
+    settings["model_path"] = str(tmp_path / "no-model")
     w = OperatorWindow(root, settings, bible)
     root.update()
     yield w
@@ -186,3 +189,50 @@ def test_listen_never_blocks_ui(op, monkeypatch):
     op.stop_listening()
     gate.set()
     assert not op.listening
+
+
+def _show(op, text):
+    op.search_var.set(text)
+    op.search()
+    op.go_live()
+
+
+def test_voice_next_verse_moves_live_in_auto_mode(op):
+    op.mode_var.set("auto")
+    op._on_mode()
+    _show(op, "john 3:16")
+    op._on_command("next_verse", "main", 1.0, "next verse")
+    assert op.live.selection.verse_label() == "John 3:17"
+    op._on_command("prev_verse", "main", 5.0, "go back")
+    assert op.live.selection.verse_label() == "John 3:16"
+    op._on_command("next_chapter", "main", 9.0, "next chapter")
+    assert op.live.selection.verse_label() == "John 4:1"
+
+
+def test_voice_command_goes_to_preview_in_manual_mode(op):
+    _show(op, "john 3:16")
+    op._on_command("next_verse", "main", 1.0, "next verse")
+    assert op.live.selection.verse_label() == "John 3:16"
+    assert op.preview.verse_label() == "John 3:17"
+
+
+def test_voice_command_heard_by_both_models_counts_once(op):
+    op.mode_var.set("auto")
+    op._on_mode()
+    _show(op, "john 3:16")
+    op._on_command("next_verse", "live", 1.0, "next verse")
+    op._on_command("next_verse", "main", 1.8, "Next verse.")  # Parakeet's copy of the same words
+    assert op.live.selection.verse_label() == "John 3:17"
+    op._on_command("next_verse", "main", 6.0, "next verse")  # a genuine second command
+    assert op.live.selection.verse_label() == "John 3:18"
+
+
+def test_move_to_verse_uses_live_chapter(op):
+    op.mode_var.set("auto")
+    op._on_mode()
+    _show(op, "rom 8:28")
+    op._on_command("next_chapter", "main", 1.0, "next chapter")  # now Romans 9:1
+    events = op.detector.feed_final("move to verse eight")
+    (kind, det), = events
+    op._on_detection(kind, det)
+    assert op.live.selection.verse_label() == "Romans 9:8"

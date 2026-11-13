@@ -143,6 +143,10 @@ def test_speech_engine_threads(clip):
     t = time.monotonic()
     service.stop()
     assert time.monotonic() - t < 3.5
+    while detected is None and not events.empty():  # flushed on stop
+        ev = events.get_nowait()
+        if ev[0] == "detect":
+            detected = ev[2].ref.label()
     assert detected == "John 3:16"
 
 
@@ -209,8 +213,10 @@ def _all_engines(engine):
     return True
 
 
-def test_choose_parakeet_on_big_machine():
+def test_choose_both_on_big_machine():
     m, _ = recognizer.choose_model(_infos(), "auto", ram_gb=16, is64=True, available=_all_engines)
+    assert m.id == "both"
+    m, _ = recognizer.choose_model(_infos(), "parakeet", ram_gb=16, is64=True, available=_all_engines)
     assert m.id == "parakeet"
 
 
@@ -240,3 +246,86 @@ def test_resampler_lengths():
     total = sum(len(r([0.1] * 8820)) for _ in range(5))
     assert abs(total - 16000) <= 2
     assert recognizer.Resampler(16000)([1.0, 2.0]) == [1.0, 2.0]
+
+
+@pytest.mark.vosk
+def test_dual_engine_detects_once(clip):
+    """Kroko and Parakeet both hear the reference; the detector reports it once."""
+    kroko, parakeet = _model("kroko"), _model("parakeet")
+    info = recognizer.combined(kroko, parakeet)
+    events = queue.Queue()
+    service = recognizer.SpeechEngine(events, Detector())
+    service.set_engine(recognizer.create_engine(info), info)
+    service.start()
+    rate, pcm = clip
+    block = int(rate * 0.2) * 2
+    for i in range(0, len(pcm) + rate * 2, block):
+        service.audio_queue.put((rate, pcm[i:i + block] or b"\0" * block))
+    deadline = time.monotonic() + 30
+    detections, finals = [], []
+    while time.monotonic() < deadline:
+        try:
+            ev = events.get(timeout=1.5)
+        except queue.Empty:
+            if detections and finals:
+                break
+            continue
+        if ev[0] == "detect":
+            detections.append((ev[1], ev[2].ref.label()))
+        elif ev[0] == "final":
+            finals.append(ev[1])
+    service.stop()
+    assert [d for d in detections if d[0] == NEW] == [(NEW, "John 3:16")], detections
+    assert finals, "Parakeet's transcript line should appear"
+
+
+def test_combined_model_is_chosen_automatically_on_big_machines():
+    M = recognizer.ModelInfo
+    infos = [M("/m/kroko", "sherpa-online", "kroko", "Kroko"), M("/m/para", "sherpa-offline", "parakeet", "P", 6)]
+    m, _ = recognizer.choose_model(infos, "auto", ram_gb=16, is64=True, available=lambda e: True)
+    assert m.id == "both" and m.engine == "dual"
+    m, _ = recognizer.choose_model(infos, "auto", ram_gb=4, is64=True, available=lambda e: True)
+    assert m.id == "kroko"
+
+
+def test_book_hotwords_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("BIVERSE_CONFIG_DIR", str(tmp_path / "cfg"))
+    tokens = tmp_path / "model" / "tokens.txt"
+    tokens.parent.mkdir()
+    tokens.write_text("<blk> 0\n▁the 1\nss 2\n", encoding="utf-8")
+    hot, vocab = recognizer.book_hotwords(str(tokens))
+    words = open(hot, encoding="utf-8").read().split("\n")
+    assert "habakkuk" in words and "thessalonians" in words and "song of solomon" in words
+    assert open(vocab, encoding="utf-8").read() == "▁the\t0\nss\t0\n"
+
+
+def test_online_engine_finalises_when_text_stalls():
+    """If the decoder never raises an endpoint, unchanged text for 1.5 s becomes final."""
+    class FakeRec(object):
+        def __init__(self):
+            self.text = "john three sixteen"
+
+        def is_ready(self, s):
+            return False
+
+        def get_result(self, s):
+            return self.text
+
+        def is_endpoint(self, s):
+            return False
+
+        def reset(self, s):
+            self.text = ""
+
+    class FakeStream(object):
+        def accept_waveform(self, rate, samples):
+            pass
+
+    eng = recognizer.SherpaOnlineEngine.__new__(recognizer.SherpaOnlineEngine)
+    eng.rec, eng.stream = FakeRec(), FakeStream()
+    eng._partial, eng._resampler, eng._rate, eng._still = "", None, None, 0
+    block = b"\0\0" * 3200  # 0.2 s at 16 kHz
+    kinds = []
+    for _ in range(12):
+        kinds += [k for k, _t in eng.accept(16000, block)]
+    assert kinds[0] == "partial" and "final" in kinds
