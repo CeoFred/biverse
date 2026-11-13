@@ -39,11 +39,14 @@ jobs:
             arch: x64
             reqs: requirements.txt
           - name: macos-intel
-            # last Intel image GitHub offers; python.org 3.8.10 (macOS 10.9+ x86_64 build)
+            # Last Intel image GitHub offers. python.org 3.12 (universal2, macOS 10.13+): its
+            # Tk 8.6.13+ draws correctly on macOS 11+; the Tk 8.6.8 in python.org 3.8.10 showed
+            # black, crashing windows on macOS 11/12 (v1.0.0-v1.2.0).
             os: macos-15-intel
-            python: "3.8.10-pkg"
+            python: "pkg"
+            pkg: "3.12.10"
             arch: x64
-            reqs: requirements-legacy.txt
+            reqs: requirements.txt
             # sherpa-onnx's macOS wheels need 10.15
             macos_min: "10.15"
           - name: macos-arm
@@ -65,7 +68,7 @@ jobs:
       # ---------------------------------------------------------------- Python
       - name: Set up Python (setup-python)
         id: setup
-        if: matrix.python != '3.8.10-pkg'
+        if: matrix.python != 'pkg'
         continue-on-error: true
         uses: actions/setup-python@v5
         with:
@@ -73,11 +76,11 @@ jobs:
           architecture: ${{ matrix.arch }}
 
       - name: Use setup-python interpreter
-        if: matrix.python != '3.8.10-pkg' && steps.setup.outcome == 'success'
+        if: matrix.python != 'pkg' && steps.setup.outcome == 'success'
         run: echo "PY=${{ steps.setup.outputs.python-path }}" >> "$GITHUB_ENV"
 
       - name: Fallback - python.org installer (Windows)
-        if: runner.os == 'Windows' && matrix.python != '3.8.10-pkg' && steps.setup.outcome != 'success'
+        if: runner.os == 'Windows' && matrix.python != 'pkg' && steps.setup.outcome != 'success'
         shell: pwsh
         run: |
           $suffix = if ("${{ matrix.arch }}" -eq "x86") { "" } else { "-amd64" }
@@ -87,12 +90,14 @@ jobs:
           Start-Process py-installer.exe -Wait -ArgumentList "/quiet","InstallAllUsers=1","PrependPath=1","Include_test=0","TargetDir=$target"
           "PY=$target\python.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: python.org 3.8.10 (macOS 10.9+ installer)
-        if: matrix.python == '3.8.10-pkg'
+      - name: python.org installer (macOS)
+        if: matrix.python == 'pkg'
         run: |
-          curl -fsSL -o python.pkg https://www.python.org/ftp/python/3.8.10/python-3.8.10-macosx10.9.pkg
+          V="${{ matrix.pkg }}"
+          curl -fsSL -o python.pkg "https://www.python.org/ftp/python/$V/python-$V-macos11.pkg"
           sudo installer -pkg python.pkg -target /
-          echo "PY=/Library/Frameworks/Python.framework/Versions/3.8/bin/python3.8" >> "$GITHUB_ENV"
+          MM="${V%.*}"
+          echo "PY=/Library/Frameworks/Python.framework/Versions/$MM/bin/python$MM" >> "$GITHUB_ENV"
 
       - name: Normalise interpreter path
         run: |
