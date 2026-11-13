@@ -143,6 +143,10 @@ def test_speech_engine_threads(clip):
     t = time.monotonic()
     service.stop()
     assert time.monotonic() - t < 3.5
+    while detected is None and not events.empty():  # flushed on stop
+        ev = events.get_nowait()
+        if ev[0] == "detect":
+            detected = ev[2].ref.label()
     assert detected == "John 3:16"
 
 
@@ -293,3 +297,35 @@ def test_book_hotwords_files(tmp_path, monkeypatch):
     words = open(hot, encoding="utf-8").read().split("\n")
     assert "habakkuk" in words and "thessalonians" in words and "song of solomon" in words
     assert open(vocab, encoding="utf-8").read() == "▁the\t0\nss\t0\n"
+
+
+def test_online_engine_finalises_when_text_stalls():
+    """If the decoder never raises an endpoint, unchanged text for 1.5 s becomes final."""
+    class FakeRec(object):
+        def __init__(self):
+            self.text = "john three sixteen"
+
+        def is_ready(self, s):
+            return False
+
+        def get_result(self, s):
+            return self.text
+
+        def is_endpoint(self, s):
+            return False
+
+        def reset(self, s):
+            self.text = ""
+
+    class FakeStream(object):
+        def accept_waveform(self, rate, samples):
+            pass
+
+    eng = recognizer.SherpaOnlineEngine.__new__(recognizer.SherpaOnlineEngine)
+    eng.rec, eng.stream = FakeRec(), FakeStream()
+    eng._partial, eng._resampler, eng._rate, eng._still = "", None, None, 0
+    block = b"\0\0" * 3200  # 0.2 s at 16 kHz
+    kinds = []
+    for _ in range(12):
+        kinds += [k for k, _t in eng.accept(16000, block)]
+    assert kinds[0] == "partial" and "final" in kinds

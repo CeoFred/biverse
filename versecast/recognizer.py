@@ -436,6 +436,9 @@ class SherpaOnlineEngine(object):
         self._partial = ""
         self._resampler = None  # type: Optional[Resampler]
         self._rate = None
+        self._still = 0  # samples since the text last changed
+
+    STILL_SECONDS = 1.5
 
     def accept(self, rate: int, pcm: bytes) -> List[Tuple[str, str]]:
         # Always feed 16 kHz: sherpa-onnx aborts the process if a stream's rate changes,
@@ -443,18 +446,25 @@ class SherpaOnlineEngine(object):
         if rate != self._rate or self._resampler is None:
             self._resampler = Resampler(rate, 16000)
             self._rate = rate
-        self.stream.accept_waveform(16000, self._resampler(pcm_to_floats(pcm)))
+        samples = self._resampler(pcm_to_floats(pcm))
+        self.stream.accept_waveform(16000, samples)
         out = []
         while self.rec.is_ready(self.stream):
             self.rec.decode_stream(self.stream)
         text = _result_text(self.rec.get_result(self.stream))
-        if self.rec.is_endpoint(self.stream):
+        self._still += len(samples)
+        # Safety net: some decoders (beam search with hotwords) do not always raise the
+        # endpoint. Text unchanged for STILL_SECONDS of audio means the speaker paused.
+        stalled = bool(text) and text == self._partial and self._still >= 16000 * self.STILL_SECONDS
+        if self.rec.is_endpoint(self.stream) or stalled:
             if text:
                 out.append(("final", text))
             self.rec.reset(self.stream)
             self._partial = ""
+            self._still = 0
         elif text != self._partial:
             self._partial = text
+            self._still = 0
             out.append(("partial", text))
         return out
 
