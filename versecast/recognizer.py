@@ -79,7 +79,13 @@ def load_model(path: str):
 
 def make_recognizer(model, samplerate: float, grammar: Optional[str] = None):
     if grammar:
-        rec = vosk.KaldiRecognizer(model, float(samplerate), grammar)
+        # Vosk warns once per grammar word missing from the model's vocabulary
+        # (e.g. "philippians" in the small model). Expected, so keep it quiet.
+        vosk.SetLogLevel(-2)
+        try:
+            rec = vosk.KaldiRecognizer(model, float(samplerate), grammar)
+        finally:
+            vosk.SetLogLevel(-1)
     else:
         rec = vosk.KaldiRecognizer(model, float(samplerate))
     rec.SetWords(False)
