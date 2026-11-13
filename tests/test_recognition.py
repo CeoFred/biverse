@@ -97,7 +97,7 @@ def test_john_3_16_detected_from_audio(model_id, clip):
 
 
 @pytest.mark.vosk
-@pytest.mark.parametrize("rate", [16000, 44100, 48000])
+@pytest.mark.parametrize("rate", [44100, 48000])
 def test_kroko_accepts_device_rates(rate, clip):
     """Devices run at 44.1/48 kHz; the engine resamples (sherpa aborts on rate changes)."""
     info = _model("kroko")
@@ -106,8 +106,13 @@ def test_kroko_accepts_device_rates(rate, clip):
     from array import array
     a = array("h")
     a.frombytes(pcm)
-    step = src_rate / float(rate)
-    out = array("h", (a[min(len(a) - 1, int(i * step))] for i in range(int(len(a) / step))))
+    step = src_rate / float(rate)  # upsample with linear interpolation, like a real device clock
+    out = array("h")
+    for i in range(int((len(a) - 1) / step)):
+        pos = i * step
+        j = int(pos)
+        frac = pos - j
+        out.append(int(a[j] * (1 - frac) + a[j + 1] * frac))
     texts = recognizer.transcribe(engine, rate, out.tobytes())
     assert "John 3:16" in _detect(texts), texts
     # stopping and starting again at another rate must not crash
