@@ -236,3 +236,120 @@ def test_move_to_verse_uses_live_chapter(op):
     (kind, det), = events
     op._on_detection(kind, det)
     assert op.live.selection.verse_label() == "Romans 9:8"
+
+
+# -- phase 1: intents -------------------------------------------------------------
+
+def _say(op, text, t, channel="main"):
+    from versecast.commands import parse_intent
+    intent = parse_intent(text)
+    assert intent is not None, text
+    op._on_command(intent, channel, t, text)
+
+
+def _auto(op):
+    op.mode_var.set("auto")
+    op._on_mode()
+
+
+def test_intent_steps_with_counts(op):
+    _auto(op)
+    _show(op, "gen 10:3-10")
+    _say(op, "go forward three verses", 1)
+    assert op.live.selection.verse_label() == "Genesis 10:6"
+    _say(op, "can we go back two verses", 5)
+    assert op.live.selection.verse_label() == "Genesis 10:4"
+    _say(op, "go back to where we started", 9)
+    assert op.live.selection.verse_label() == "Genesis 10:3"
+
+
+def test_intent_chapter_goto_same_book(op):
+    _auto(op)
+    _show(op, "gen 10:3")
+    _say(op, "go back to chapter three", 1)
+    assert op.live.selection.verse_label() == "Genesis 3:1"
+    _say(op, "turn to chapter four verse two", 5)
+    assert op.live.selection.verse_label() == "Genesis 4:2"
+    _say(op, "go to the beginning of the chapter", 9)
+    assert op.live.selection.verse_label() == "Genesis 4:1"
+
+
+def test_intent_impossible_target_is_ignored(op):
+    _auto(op)
+    _show(op, "jude 1:3")
+    _say(op, "go to chapter five", 1)
+    assert op.live.selection.verse_label() == "Jude 1:3"
+    assert "not possible" in op.status_var.get()
+
+
+def test_stop_and_continue_toggle_following(op):
+    _show(op, "gen 10:3-10")
+    _say(op, "let's stop there", 1)
+    assert op.following is False
+    _say(op, "let's continue", 5)
+    assert op.following is True
+
+
+def test_book_less_chapter_and_verse_detection(op):
+    _auto(op)
+    _show(op, "gen 10:3")
+    (kind, det), = op.detector.feed_final("now turn to chapter four verse two")
+    op._on_detection(kind, det)
+    assert op.live.selection.verse_label() == "Genesis 4:2"
+
+
+# -- phase 2: following the reading ---------------------------------------------------
+
+def _read_aloud(op, text):
+    ws = text.split()
+    for i in range(1, len(ws) + 1):
+        op.follower._since = -10.0  # skip the dwell time in tests
+        op._handle(("partial", " ".join(ws[:i])))
+
+
+def test_follow_moves_live_verse_as_reading_ends(op, bible):
+    _show(op, "john 3:16-18")  # Manual mode: following still moves the live slide
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:17"
+    assert op.live.selection.start == 16 and op.live.selection.end == 18  # still the same passage
+    _read_aloud(op, bible.verse("KJV", 43, 3, 17))
+    assert op.live.selection.verse_label() == "John 3:18"
+    _read_aloud(op, bible.verse("KJV", 43, 3, 18))
+    assert op.live.selection.verse_label() == "John 3:18"  # end of the range: stays
+
+
+def test_stop_there_and_continue(op, bible):
+    _show(op, "john 3:16-18")
+    _say(op, "let's stop there", 1)
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+    assert "Paused" in op.follow_label.cget("text")
+    _say(op, "let's continue", 5)
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:17"
+
+
+def test_follow_button_and_setting(op, bible):
+    _show(op, "john 3:16-18")
+    op.toggle_following()
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+    op.toggle_following()
+    op.settings["follow_reading"] = False
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+
+
+def test_operator_move_restarts_following(op, bible):
+    _show(op, "john 3:16-18")
+    op.step(1)  # operator jumps to 17 by hand
+    _read_aloud(op, bible.verse("KJV", 43, 3, 17))
+    assert op.live.selection.verse_label() == "John 3:18"
+
+
+def test_blank_screen_is_not_followed(op, bible):
+    _show(op, "john 3:16-18")
+    op.blank()
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    op.blank()
+    assert op.live.selection.verse_label() == "John 3:16"

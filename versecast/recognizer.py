@@ -32,7 +32,7 @@ from array import array
 from typing import List, Optional, Tuple
 
 from . import paths, sysinfo
-from .commands import parse_command
+from .commands import parse_intent
 from .detector import REFERENCE, Detector
 
 log = logging.getLogger(__name__)
@@ -791,6 +791,6 @@ class SpeechEngine(object):
     def _command(self, text: str, channel: str) -> None:
         if not self.commands:
             return
-        cmd = parse_command(text)
-        if cmd is not None:
-            self.events.put(("command", cmd, channel, time.monotonic(), text))
+        intent = parse_intent(text)
+        if intent is not None:
+            self.events.put(("command", intent, channel, time.monotonic(), text))

@@ -30,6 +30,10 @@ FILLER = frozenset(["of"])
 # we know" and ranges ("16 to 18") are unaffected.
 CHAPTER_HOMOPHONES = {"to": 2, "too": 2, "for": 4, "fore": 4, "ate": 8, "won": 1}
 RANGE_WORDS = frozenset(["to", "through", "thru", "till", "til", "until"])
+# Words that may come right before a book-less "chapter N verse M" (same book as on screen)
+SAME_BOOK_LEADS = frozenset(["to", "turn", "go", "back", "and", "now", "in", "at", "read", "see", "look", "open",
+                             "jump", "move", "into", "then", "also", "same", "let", "lets", "us", "come",
+                             "return", "over", "from"])
 
 VerseCounter = Callable[[int, int], int]
 
@@ -80,6 +84,11 @@ class Reference(object):
                 and self.verse_start <= other.verse_start and other.verse_end <= self.verse_end)
 
     def label(self):
+        if self.book is None and self.chapter is not None:
+            base = "chapter %d" % self.chapter
+            sep = ":"
+            text = "%s%s%d" % (base, sep, self.verse_start)
+            return text + ("-%d" % self.verse_end if self.verse_end != self.verse_start else "")
         if self.book is None:
             base = "verse"
         else:
@@ -93,7 +102,12 @@ class Reference(object):
         return text
 
     def with_context(self, book, chapter, verse_count=default_verse_count):
-        """Resolve a relative reference against ``book chapter``."""
+        """Resolve a relative reference against ``book chapter``.
+
+        A relative reference that names its own chapter ("chapter 4 verse 2")
+        keeps that chapter and only takes the book from the context."""
+        if self.chapter is not None:
+            chapter = self.chapter
         n = verse_count(book, chapter)
         if n == 0 or self.verse_start < 1 or self.verse_start > n:
             return None
@@ -330,6 +344,25 @@ def parse_tokens(tokens, mode="speech", strict=True, relative=True, verse_count=
             continue
 
         tok = tokens[i]
+        # "chapter 4 verse 2" with no book: same book as on screen. Only straight after a
+        # movement/connective word (or at the start), so "<garbled book> chapter 3 verse 5"
+        # cannot land in the current book.
+        if (relative and tok in CHAPTER_WORDS and i + 1 < n and _is_num(tokens[i + 1])
+                and (i == 0 or tokens[i - 1] in SAME_BOOK_LEADS)):
+            k = i + 2
+            sep = False
+            while k < n and (tokens[k] in VERSE_WORDS or tokens[k] in SEPARATORS or tokens[k] in FILLER):
+                sep = sep or tokens[k] in VERSE_WORDS or tokens[k] in SEPARATORS
+                k += 1
+            if sep and k < n and _is_num(tokens[k]):
+                c, vs = int(tokens[i + 1]), int(tokens[k])
+                ve, end = vs, k + 1
+                if end + 1 < n and tokens[end] in RANGE_WORDS and _is_num(tokens[end + 1]):
+                    ve, end = max(vs, int(tokens[end + 1])), end + 2
+                if c >= 1 and vs >= 1:
+                    out.append(Reference(None, c, vs, ve, True, text_of(i, end), 0.7, True, (i, end)))
+                    i = end
+                    continue
         # Not right after a number: "<unknown book> chapter 3 verse 5" must not become
         # verse 5 of whatever chapter is on screen.
         if (relative and tok in ("verse", "verses") and i + 1 < n and _is_num(tokens[i + 1])

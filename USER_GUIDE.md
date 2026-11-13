@@ -175,10 +175,41 @@ In **Detected**, click an entry to preview it again, or double-click it to send 
   on with Next. The entry in Detected is marked *(relative)*.
 
 **Voice commands** (Settings → Detection, on by default). The preacher can move the slide by
-voice:
+voice, in their own words. Some examples BiVerse understands:
 
-| Say | What happens |
+| The preacher says | What happens |
 |---|---|
+| "next verse", "the next one", "one more verse", "Next.", "move forward" | next verse |
+| "go back", "can we go back?", "the verse before", "back to the previous one" | previous verse |
+| "go back two verses", "skip ahead three verses", "a couple of verses back" | moves that many verses |
+| "next chapter", "go back a chapter", "go back two chapters" | verse 1 of that chapter |
+| "go back to chapter three", "turn to chapter four verse two" | that chapter (and verse) of **the same book** |
+| "move to verse eight", "verse eight" | verse 8 of the chapter on screen |
+| "the beginning of the chapter", "back to verse one" | verse 1 of this chapter |
+| "back to where we started" | the first verse of the passage you sent live |
+| "stop there", "let's stop there" / "continue", "let's continue", "read on" | pause / resume following the reading |
+
+**Following the reading.** Once a verse or passage is live (for example Genesis 10:3–10), BiVerse
+listens to the preacher reading it and moves to the next verse as they reach the end of each
+one, typically within about a third of a second. It works even if the preacher reads from a
+different translation from the one on screen, and it handles skipped verses. At the end of a
+range it stays put unless the preacher carries on reading the next verse aloud. Following
+moves the live slide in both Manual and Auto mode, because you already approved the passage.
+
+- The indicator under the buttons shows **● Following 60%** (how far through the verse the
+  preacher is) or **‖ Paused**.
+- "**Stop there**" pauses following (the verse stays up). "**Continue**" or "**let's continue**"
+  resumes it. You can also press **Pause following** or **F6**.
+- Turn it off in Settings → Detection → "Follow the reading".
+- Following uses the live words from Kroko. With Parakeet alone it can only move after each
+  pause, so the combined "Kroko + Parakeet" setting is best.
+
+In **Auto** mode voice commands change the projector straight away. In **Manual** mode the new
+verse goes to Preview for you to send live. Ordinary sentences do nothing: "next week we have a retreat",
+"go back to Egypt", "let's continue to worship" and "the chapter of your life" are ignored.
+The Status line shows what BiVerse heard and did.
+
+---|---|
 | "next verse", "the following verse", or just "Next." | next verse |
 | "go back", "previous verse", "go back a verse" | previous verse |
 | "next chapter", "move to the next chapter" | verse 1 of the next chapter |
@@ -237,6 +268,7 @@ On a Mac, use Cmd instead of Ctrl.
 | Ctrl+F | Jump to Search |
 | Ctrl+L | Listen on/off |
 | Ctrl+M | Manual / Auto |
+| F6 | Pause / resume following the reading |
 | F11 (on the output window) | Full screen / window |
 
 ---

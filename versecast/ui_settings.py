@@ -123,6 +123,7 @@ class SettingsDialog(object):
         self.auto_verse = tk.BooleanVar(value=s["auto_requires_verse"])
         self.ref_rec = tk.BooleanVar(value=s["reference_recognizer"])
         self.voice_cmds = tk.BooleanVar(value=s["voice_commands"])
+        self.follow = tk.BooleanVar(value=s["follow_reading"])
         ttk.Checkbutton(dt, text="Strict book names (Mark, John, Job, Acts… need chapter and verse)",
                         variable=self.strict).grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Checkbutton(dt, text="Relative verses (\"verse 17\" uses the last book and chapter)",
@@ -137,6 +138,8 @@ class SettingsDialog(object):
         ttk.Label(dt, text="Auto mode moves the live verse; Manual mode puts it in Preview. \"Next\" and "
                            "\"go back\" on their own only count as a short command, not inside a sentence.",
                   foreground="#666666", wraplength=420).grid(row=7, column=0, columnspan=2, sticky="w")
+        ttk.Checkbutton(dt, text="Follow the reading: move to the next verse as the preacher finishes each one",
+                        variable=self.follow).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Checkbutton(dt, text="Extra reference listener (classic engine only; about twice the CPU)",
                         variable=self.ref_rec).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Label(dt, text="Turn off on very slow computers. It only adds references that include both a "
@@ -202,6 +205,7 @@ class SettingsDialog(object):
         s["auto_requires_verse"] = bool(self.auto_verse.get())
         s["reference_recognizer"] = bool(self.ref_rec.get())
         s["voice_commands"] = bool(self.voice_cmds.get())
+        s["follow_reading"] = bool(self.follow.get())
         model_changed = (self.model_path.get().strip() != s["model_path"]
                          or self.speech_model.get() != s["speech_model"])
         s["model_path"] = self.model_path.get().strip()

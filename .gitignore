@@ -12,3 +12,4 @@ data/cache/
 *.spec.bak
 .DS_Store
 screenshots/*.xwd
+graphify-out/
