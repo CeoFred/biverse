@@ -22,7 +22,7 @@ import time
 from typing import List, Optional
 
 from . import paths
-from .detector import Detector
+from .detector import REFERENCE, Detector
 
 log = logging.getLogger(__name__)
 
@@ -77,10 +77,53 @@ def load_model(path: str):
     return vosk.Model(path)
 
 
-def make_recognizer(model, samplerate: float):
-    rec = vosk.KaldiRecognizer(model, float(samplerate))
+def make_recognizer(model, samplerate: float, grammar: Optional[str] = None):
+    if grammar:
+        # Vosk warns once per grammar word missing from the model's vocabulary
+        # (e.g. "philippians" in the small model). Expected, so keep it quiet.
+        vosk.SetLogLevel(-2)
+        try:
+            rec = vosk.KaldiRecognizer(model, float(samplerate), grammar)
+        finally:
+            vosk.SetLogLevel(-1)
+    else:
+        rec = vosk.KaldiRecognizer(model, float(samplerate))
     rec.SetWords(False)
     return rec
+
+
+def supports_grammar(model_path: Optional[str]) -> bool:
+    """Models with a dynamic graph (small and "lgraph" models) accept a runtime grammar.
+
+    Big static-graph models (graph/HCLG.fst) do not; they are accurate enough
+    without the reference-only recogniser.
+    """
+    if not model_path:
+        return False
+    graph = os.path.join(model_path, "graph")
+    return os.path.isfile(os.path.join(graph, "HCLr.fst")) and os.path.isfile(os.path.join(graph, "Gr.fst"))
+
+
+def reference_grammar() -> str:
+    """Vosk grammar (JSON word list) for the reference-only recogniser.
+
+    Only words that occur in references: book names and their spoken variants,
+    number words, "chapter", "verse" and range words, plus "[unk]" for
+    everything else. Words missing from a model's vocabulary are ignored by Vosk.
+    """
+    from . import books
+    from .numbers import TEENS, TENS, UNITS
+
+    words = set()
+    for book in books.BOOKS:
+        for name in book.spoken + (book.name.lower(),):
+            for w in name.replace("'", "").split():
+                if not w.isdigit():
+                    words.add(w)
+    words |= set(UNITS) | set(TEENS) | {w for w in TENS if w != "fourty"}
+    words |= {"hundred", "a", "and", "chapter", "chapters", "verse", "verses", "colon", "to", "through",
+              "first", "second", "third", "the", "book", "of"}
+    return json.dumps(sorted(words) + ["[unk]"])
 
 
 def transcribe_pcm(model, samplerate: int, pcm: bytes, chunk: int = 8000) -> List[str]:
@@ -110,6 +153,9 @@ class SpeechEngine(object):
         self._worker = None  # type: Optional[threading.Thread]
         self._stop = threading.Event()
         self._load_token = 0
+        # Second, reference-only recogniser (see reference_grammar). Toggled from settings.
+        self.use_reference = True
+        self._grammar = reference_grammar()
 
     # -- model ------------------------------------------------------------------
     def load(self, user_path: Optional[str] = None) -> None:
@@ -179,6 +225,7 @@ class SpeechEngine(object):
 
     def _run(self) -> None:
         rec = None
+        ref_rec = None
         rate = None
         last_partial = ""
         while not self._stop.is_set():
@@ -193,7 +240,13 @@ class SpeechEngine(object):
             try:
                 if rec is None or samplerate != rate:
                     rec = make_recognizer(model, samplerate)
+                    ref_rec = None
                     rate = samplerate
+                want_ref = self.use_reference and supports_grammar(self.model_path)
+                if want_ref and ref_rec is None:
+                    ref_rec = make_recognizer(model, samplerate, self._grammar)
+                elif not want_ref:
+                    ref_rec = None
                 if rec.AcceptWaveform(data):
                     text = json.loads(rec.Result()).get("text", "")
                     last_partial = ""
@@ -204,17 +257,33 @@ class SpeechEngine(object):
                     if partial != last_partial:
                         last_partial = partial
                         self.events.put(("partial", partial))
+                if ref_rec is not None and ref_rec.AcceptWaveform(data):
+                    self._final_reference(json.loads(ref_rec.Result()).get("text", ""))
             except Exception as exc:
                 log.exception("recogniser error")
                 self.events.put(("error", "speech recognition error: %s" % exc))
                 rec = None
+                ref_rec = None
         if rec is not None:
             try:
                 text = json.loads(rec.FinalResult()).get("text", "")
                 if text:
                     self._final(text)
+                if ref_rec is not None:
+                    self._final_reference(json.loads(ref_rec.FinalResult()).get("text", ""))
             except Exception:
                 pass
+
+    def _final_reference(self, text: str) -> None:
+        """Result of the reference-only recogniser: detections only, never the transcript."""
+        if not text or not text.replace("[unk]", "").strip():
+            return
+        log.debug("reference recogniser: %s", text)
+        try:
+            for kind, det in self.detector.feed_final(text, channel=REFERENCE):
+                self.events.put(("detect", kind, det))
+        except Exception:
+            log.exception("detector error on %r", text)
 
     def _final(self, text: str) -> None:
         self.events.put(("final", text))
