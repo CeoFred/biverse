@@ -200,7 +200,13 @@ def self_test(report_path: str = "") -> int:
 
     def audio_():
         from . import audio
-        assert audio.available(), "sounddevice/PortAudio failed to load: %s" % audio.SD_ERROR
+        if not audio.available():
+            err = audio.SD_ERROR or ""
+            # The library must be present (critical); a machine without any audio
+            # system (a headless CI box with no PulseAudio) is tolerated.
+            if "library not found" in err.lower() or "no module" in err.lower():
+                raise AssertionError("sounddevice/PortAudio failed to load: %s" % err)
+            return {"portaudio": "loaded, but no audio system available: %s" % err, "input_devices": []}
         import sounddevice as sd
         devs = audio.list_input_devices()
         return {"portaudio": sd.get_portaudio_version()[1], "input_devices": [d.label() for d in devs]}

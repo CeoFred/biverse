@@ -57,18 +57,23 @@ for pattern in ("libvosk*", "*.dll", "*.so", "*.dylib", "*.dyld"):
 if not any(os.path.basename(p).startswith("libvosk") for p, _ in binaries):
     raise SystemExit("libvosk not found in %s" % vosk_dir)
 
-# sounddevice ships PortAudio in _sounddevice_data (Windows/macOS). The contrib
-# hook collects it; this is a belt-and-braces copy for older hook versions.
-try:
-    import _sounddevice_data  # noqa: F401
+def _keep(entry):
+    """Only this platform's / architecture's PortAudio build (the wheels ship all of them)."""
+    base = os.path.basename(entry[0]).lower()
+    if "portaudio" not in base:
+        return True
+    if "asio" in base:
+        return False
+    if sys.platform == "darwin":
+        return base.endswith(".dylib")
+    if sys.platform == "win32":
+        want = "64bit" if sys.maxsize > 2 ** 32 else "32bit"
+        return base.endswith(".dll") and want in base
+    return True
 
-    for p in collect_data_files("_sounddevice_data"):
-        if p[0].endswith((".dll", ".dylib")):
-            binaries.append((p[0], p[1]))
-        else:
-            datas.append(p)
-except ImportError:
-    pass  # Linux: system libportaudio2
+
+# sounddevice ships PortAudio in _sounddevice_data; packaging/hooks/hook-sounddevice.py
+# collects only this platform's library (overrides the contrib hook).
 
 hiddenimports = ["_cffi_backend", "vosk.vosk_cffi"]
 excludes = ["numpy", "PIL", "matplotlib", "PyQt5", "PySide2", "PySide6", "IPython", "pytest",
@@ -104,26 +109,11 @@ a = Analysis(  # noqa: F821
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    hookspath=[],
+    hookspath=[os.path.join(ROOT, "packaging", "hooks")],
     runtime_hooks=[],
     excludes=excludes,
     noarchive=False,
 )
-
-
-def _keep(entry):
-    """Only this platform's / architecture's PortAudio build (the wheels ship all of them)."""
-    base = os.path.basename(entry[0]).lower()
-    if "portaudio" not in base:
-        return True
-    if "asio" in base:
-        return False
-    if sys.platform == "darwin":
-        return base.endswith(".dylib")
-    if sys.platform == "win32":
-        want = "64bit" if sys.maxsize > 2 ** 32 else "32bit"
-        return base.endswith(".dll") and want in base
-    return True
 
 
 # TOC (PyInstaller 5) and list (6) both accept an iterable

@@ -44,7 +44,7 @@ jobs:
             reqs: requirements-legacy.txt
             macos_min: "10.13"
           - name: macos-arm
-            os: macos-14
+            os: macos-15
             python: "3.12"
             arch: arm64
             reqs: requirements.txt
