@@ -171,19 +171,28 @@ def self_test(report_path: str = "") -> int:
         return out
 
     def model():
-        from . import recognizer
-        path = recognizer.find_model()
-        assert path, "no speech model found"
-        m = recognizer.load_model(path)
-        silence = b"\0\0" * 16000
-        texts = recognizer.transcribe_pcm(m, 16000, silence)
-        lib = None
-        import vosk
-        vdir = os.path.dirname(vosk.__file__)
-        for name in os.listdir(vdir):
-            if name.startswith("libvosk"):
-                lib = name
-        return {"path": path, "vosk_lib": lib, "silence_text": texts}
+        from . import recognizer, sysinfo
+        models = recognizer.discover_models()
+        assert models, "no speech model found"
+        info, reason = recognizer.choose_model(models)
+        out = {"installed": ["%s (%s)" % (m.id, m.engine) for m in models],
+               "sherpa_onnx": "ok" if recognizer.sherpa() is not None else recognizer.SHERPA_ERROR,
+               "vosk": "ok" if recognizer.vosk is not None else recognizer.VOSK_ERROR,
+               "ram_gb": round(sysinfo.total_ram_gb() or 0, 1), "64bit": sysinfo.is_64bit()}
+        assert info is not None, "no usable speech engine: %s" % reason
+        # Load and run every bundled engine that can load here; the chosen one must work.
+        for m in models:
+            t = time.perf_counter()
+            try:
+                engine = recognizer.create_engine(m)
+                texts = recognizer.transcribe(engine, 48000, b"\0\0" * 48000)
+                out[m.id] = {"ok": True, "load_s": round(time.perf_counter() - t, 2), "silence_text": texts}
+            except Exception as exc:
+                out[m.id] = {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)}
+                if m is info:
+                    raise
+        out["chosen"] = "%s (%s)" % (info.id, reason)
+        return out
 
     def parser():
         from .parser import parse

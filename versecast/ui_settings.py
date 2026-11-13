@@ -78,21 +78,38 @@ class SettingsDialog(object):
         # -- speech
         sp = ttk.Frame(nb, padding=10)
         nb.add(sp, text="Speech")
+        self.speech_model = tk.StringVar(value=s["speech_model"])
         self.model_path = tk.StringVar(value=s["model_path"])
-        ttk.Label(sp, text="Speech model in use:").grid(row=0, column=0, sticky="w")
-        self.model_label = ttk.Label(sp, text=op.engine.model_path or "(none)", foreground="#444444",
-                                     wraplength=420)
-        self.model_label.grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
-        ttk.Label(sp, text="Model folder (blank = automatic):").grid(row=2, column=0, sticky="w")
-        ttk.Entry(sp, textvariable=self.model_path, width=44).grid(row=3, column=0, columnspan=2, sticky="w")
-        ttk.Button(sp, text="Choose speech model folder…", command=self._choose_model).grid(
-            row=4, column=0, sticky="w", pady=4)
-        ttk.Button(sp, text="Use automatic", command=lambda: self.model_path.set("")).grid(
-            row=4, column=1, sticky="w", pady=4)
-        ttk.Label(sp, text="Bigger models (e.g. vosk-model-en-us-0.22-lgraph) are more accurate but need more "
-                           "memory and CPU. Download from alphacephei.com/vosk/models on another computer, "
-                           "unzip, and choose the folder here.", wraplength=420, foreground="#666666").grid(
-            row=5, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        installed = {m.id for m in recognizer.discover_models()}
+        ttk.Label(sp, text="In use: %s" % (op.engine.model_label or "(none)"), font=("TkDefaultFont", 11, "bold")).grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
+        choices = [
+            ("auto", "Automatic (recommended)", "Parakeet if installed and this computer can run it, else Kroko"),
+            ("kroko", "Kroko \u2014 live, fast, light", "built in"),
+            ("parakeet", "Parakeet \u2014 most accurate, best with accents",
+             "installed" if "parakeet" in installed else "not installed \u2014 needs the model pack"),
+            ("vosk-small", "Classic (Vosk small)", "for computers where the others will not run"
+             if "vosk-small" in installed else "not installed"),
+            ("custom", "A model folder I choose", ""),
+        ]
+        for row, (value, text, note) in enumerate(choices, 1):
+            ttk.Radiobutton(sp, text=text, value=value, variable=self.speech_model).grid(
+                row=row, column=0, sticky="w")
+            ttk.Label(sp, text=note, foreground="#666666").grid(row=row, column=1, columnspan=2, sticky="w",
+                                                                padx=(8, 0))
+        row = len(choices) + 1
+        folder = ttk.Frame(sp)
+        folder.grid(row=row, column=0, columnspan=3, sticky="w", padx=(22, 0))
+        ttk.Entry(folder, textvariable=self.model_path, width=38).pack(side="left")
+        ttk.Button(folder, text="Choose\u2026", command=self._choose_model).pack(side="left", padx=4)
+        row += 1
+        ttk.Separator(sp).grid(row=row, column=0, columnspan=3, sticky="ew", pady=10)
+        row += 1
+        ttk.Button(sp, text="Install model pack\u2026", command=self._install_pack).grid(
+            row=row, column=0, sticky="w")
+        ttk.Label(sp, text="For the Parakeet pack zip from the BiVerse download page. Needs a 64-bit computer "
+                           "with about 6 GB of RAM or more.", wraplength=330, foreground="#666666").grid(
+            row=row, column=1, columnspan=2, sticky="w", padx=(8, 0))
 
         # -- detection
         dt = ttk.Frame(nb, padding=10)
@@ -111,7 +128,7 @@ class SettingsDialog(object):
             row=2, column=1, sticky="w")
         ttk.Checkbutton(dt, text="Auto mode: only send references with chapter AND verse live",
                         variable=self.auto_verse).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 2))
-        ttk.Checkbutton(dt, text="Extra reference listener (catches more references; uses about twice the CPU)",
+        ttk.Checkbutton(dt, text="Extra reference listener (classic engine only; about twice the CPU)",
                         variable=self.ref_rec).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Label(dt, text="Turn off on very slow computers. It only adds references that include both a "
                            "chapter and a verse.", foreground="#666666", wraplength=420).grid(
@@ -142,9 +159,18 @@ class SettingsDialog(object):
         path = filedialog.askdirectory(parent=self.win, title="Choose speech model folder")
         if path:
             self.model_path.set(path)
-            if not recognizer.is_model_dir(path) and recognizer.find_model(path) is None:
-                messagebox.showwarning("Speech model", "That folder does not look like a Vosk model "
-                                          "(it should contain 'am' and 'graph' folders).", parent=self.win)
+            self.speech_model.set("custom")
+            if recognizer.detect_model(path) is None:
+                messagebox.showwarning("Speech model", "That folder does not look like a speech model BiVerse "
+                                       "can use (a Vosk model, or a sherpa-onnx model with biverse-model.json).",
+                                       parent=self.win)
+
+    def _install_pack(self) -> None:
+        path = filedialog.askopenfilename(parent=self.win, title="Choose the BiVerse model pack",
+                                          filetypes=[("Model pack", "*.zip"), ("All files", "*")])
+        if path:
+            self._ok()
+            self.op.install_pack(path)
 
     def apply(self) -> None:
         s = self.op.settings
@@ -166,12 +192,13 @@ class SettingsDialog(object):
             pass
         s["auto_requires_verse"] = bool(self.auto_verse.get())
         s["reference_recognizer"] = bool(self.ref_rec.get())
-        model_changed = self.model_path.get().strip() != s["model_path"]
+        model_changed = (self.model_path.get().strip() != s["model_path"]
+                         or self.speech_model.get() != s["speech_model"])
         s["model_path"] = self.model_path.get().strip()
+        s["speech_model"] = self.speech_model.get()
         self.op.apply_settings()
         if model_changed:
             self.op.reload_model()
-            self.model_label.configure(text="(loading…)")
 
     def _test(self) -> None:
         self.apply()

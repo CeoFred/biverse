@@ -15,7 +15,9 @@ computer. There is no internet connection, account, cloud service or telemetry.
 
 - Any audio input: built-in or USB microphone, audio interface, mixer line-in, Stereo Mix,
   VB-Cable or BlackHole. Includes a live level meter.
-- Real-time offline English speech recognition ([Vosk](https://alphacephei.com/vosk/)).
+- Real-time offline English speech recognition with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx):
+  **Kroko** (live, built in) or **NVIDIA Parakeet** (optional pack, far better with African and
+  other accents). The classic Vosk model remains as a fallback for Windows 7.
 - A robust reference parser. It understands number words, numbered books ("second Timothy"),
   ranges, whole chapters, "Psalm one nineteen" as 119, and relative "verse 18". Everyday
   words such as *mark*, *job* and *acts* are not mistaken for books.
@@ -40,7 +42,8 @@ Get the zip for your computer from the
 | `BiVerse-<version>-windows-legacy-x64.zip` | Windows 7 SP1 / 8 / 8.1 (and 10/11), 64-bit |
 | `BiVerse-<version>-windows-legacy-x86.zip` | Windows 7+ 32-bit |
 | `BiVerse-<version>-macos-arm.zip` | Apple Silicon Macs, macOS 11+ |
-| `BiVerse-<version>-macos-intel.zip` | Intel Macs, macOS 10.13+ (also runs on Apple Silicon via Rosetta) |
+| `BiVerse-<version>-macos-intel.zip` | Intel Macs, macOS 10.15+ (also runs on Apple Silicon via Rosetta) |
+| `BiVerse-model-pack-parakeet-<version>.zip` | Optional high-accuracy speech model (64-bit, ~6 GB RAM) |
 
 `SHA256SUMS.txt` lists the checksums. The [User Guide](USER_GUIDE.md) covers installation,
 connecting the projector, audio sources and troubleshooting, for non-technical volunteers.
@@ -59,7 +62,7 @@ python tools/build_bible_db.py           # downloads pinned public-domain texts 
 ```
 
 ```bash
-python tools/fetch_model.py              # downloads the Vosk model -> models/
+python tools/fetch_model.py --name kroko,vosk-small   # speech models -> models/ (add parakeet for best accuracy)
 ```
 
 ```bash
@@ -87,7 +90,7 @@ the zips and checksums.
 ## Architecture
 
 ```
-Audio input (sounddevice) --int16 blocks--> queue --> Recogniser thread (Vosk)
+Audio input (sounddevice) --int16 blocks--> queue --> Recogniser thread (Kroko / Parakeet+VAD / Vosk)
      |                                                        | final / partial text
      +-- level meter (UI polls)                               v
                                          Reference parser + detector (dedupe, context, relative)
@@ -109,7 +112,8 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `versecast/detector.py` | Context across pauses, de-duplication, range extension, relative verses |
 | `versecast/bible.py` | SQLite access: verses, ranges, next/prev, phrase search |
 | `versecast/audio.py` | Device listing, capture, downmix, level, async open, watchdog |
-| `versecast/recognizer.py` | Vosk model discovery and loading, recogniser thread |
+| `versecast/recognizer.py` | Model discovery and choice, Kroko / Parakeet / Vosk engines, recogniser thread |
+| `versecast/modelpack.py` | Installs the optional Parakeet model pack |
 | `versecast/displays.py` | Monitor enumeration (Win32 / CoreGraphics / xrandr) |
 | `versecast/render.py` | Shared slide renderer with auto-fit (output and thumbnails) |
 | `versecast/controller.py` | Preview/Live selection state and stepping |
@@ -117,10 +121,10 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `versecast/settings.py`, `paths.py` | JSON settings, resource and config locations |
 | `tools/` | DB builder, model fetcher, translation importer, icons, screenshots |
 
-Runtime dependencies are only `vosk==0.3.44`, `sounddevice` and the standard library. See
+Runtime dependencies are only `sherpa-onnx`, `vosk==0.3.44`, `sounddevice` and the standard library (no numpy). See
 [DECISIONS.md](DECISIONS.md) for design choices and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for licences.
 
 ## Licence
 
-MIT. Bible texts are public domain. The Vosk model is Apache 2.0.
+MIT. Bible texts are public domain. Speech models: Kroko CC-BY-SA, Parakeet CC-BY-4.0, Vosk Apache 2.0.

@@ -87,6 +87,11 @@ def user_bible_db_path() -> str:
     return os.path.join(config_dir(), "user_translations.db")
 
 
+def user_models_dir() -> str:
+    """Where "Install model pack..." puts models (survives app updates)."""
+    return os.path.join(config_dir(), "models")
+
+
 def model_search_dirs(user_choice: Optional[str] = None) -> List[str]:
     """Candidate speech-model locations in discovery order (spec §6)."""
     dirs = []

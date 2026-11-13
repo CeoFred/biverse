@@ -69,6 +69,46 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   for John (strict, so it needs a chapter and a verse). "were", "versus", "vers" and "worse"
   count as "verse" only *between* a chapter number and a verse number. "we were sixteen
   people" still does not match. More entries should be collected from real sermons.
+- **Speech engine: sherpa-onnx with Kroko by default and an optional Parakeet pack (v1.1).**
+  A real service showed the small Vosk model failing on accented speech. Eight offline models
+  were benchmarked. The test set was 40 random clips of OpenSLR 70 (Nigerian English, CC BY-SA)
+  for word error rate, and 192 synthetic sermon clips (8 voices including South African
+  English, clean and with noise) for reference detection and false positives:
+
+  | Model | WER (Nigerian) | Refs found | Wrong verses | Speed (RTF, 2 threads) | RAM |
+  |---|---|---|---|---|---|
+  | Vosk small 0.15 | 32.5 % | 30/96 | 0 | 0.127 | low |
+  | Vosk 0.22-lgraph | 28.5 % | 34/96 | 0 | 0.688 | |
+  | NeMo streaming CTC 80 ms | 23.4 % | 36/96 | 0 | 0.103 | |
+  | Whisper base.en | 19.2 % | 48/96 | 0 | 0.060 | |
+  | Kroko (2025-08-06) | 19.9 % | 67/96 | 0 | 0.019 | ~370 MB |
+  | Moonshine base | 14.3 % | 60/96 | 0 | 0.016 | ~650 MB |
+  | Whisper small.en | 11.3 % | 70/96 | 0 | 0.131 | |
+  | **Parakeet TDT 0.6B v2 int8** | **7.3 %** | **88/96** | 0 | 0.055 | ~1.6 GB |
+
+  Kroko is built into every download because it is small (81 MB), streaming and light.
+  Parakeet ships as a separate pack (about 480 MB) because of its size and RAM. "Automatic"
+  uses Parakeet only on 64-bit computers with at least 6 GB RAM. Its phrases are cut at pauses
+  by Silero VAD (0.45 s silence, maximum 12 s). sherpa-onnx has wheels for Python 3.8, win32 and
+  macOS, and it needs no numpy. Whisper-based Python packages (faster-whisper, pywhispercpp)
+  need Python 3.9+ and numpy, which would drop the Windows 7 builds.
+- **Vosk stays as a fallback** in the Windows legacy builds only, because ONNX Runtime may not
+  load on Windows 7. If sherpa-onnx fails to import, "Automatic" picks Vosk with its reference
+  listener.
+- **The minimum macOS for the Intel build rises from 10.13 to 10.15,** because sherpa-onnx's
+  macOS wheels target 10.15.
+- **Audio is resampled to 16 kHz in Python before it reaches sherpa-onnx** (box-filter
+  decimation for 48/32 kHz, linear otherwise). sherpa-onnx aborts the whole process if a
+  stream's sample rate changes, which happened when padding the end of a stream at 16 kHz
+  after 48 kHz input.
+- **Parser support for neural-model output:** digits with colons and dashes ("Genesis 2:18",
+  "3:16-18"), and merged chapter+verse digits ("Philippians 413" → 4:13), the latter in speech
+  mode only and never for strict books ("my job 365 days").
+- **Model packs** are zips holding one model folder with `biverse-model.json`. They are
+  validated (no absolute or `..` paths, exactly one folder, a known engine) before extraction,
+  unpacked into a temporary folder and then moved into place, inside the settings folder.
+- **Kroko licence caveat:** the model card says CC-BY-SA, but the repository's LICENSE file is
+  empty and gives no version. Ask Banafo to confirm the exact terms before wide distribution.
 - **Reference-only second recogniser (v1.1).** Real use showed the small model turning
   "genesis two eighteen" into "genesis to a team". A second Vosk recogniser with a grammar of
   book names, number words and reference keywords now runs on the same audio. On 84
