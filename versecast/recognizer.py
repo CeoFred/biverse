@@ -366,6 +366,43 @@ class VoskEngine(object):
         return out
 
 
+def book_hotwords(tokens_path: str) -> Tuple[str, str]:
+    """Write a hotwords file of book names and a BPE vocab for a sherpa-onnx model.
+
+    Measured on 528 clips (66 books x 4 voices): +1.5 points for Kroko, -0.6
+    for Parakeet, no false alarms either way; so only Kroko uses it (DECISIONS.md).
+    Returns ``(hotwords_path, bpe_vocab_path)`` in the settings folder.
+    """
+    from . import books
+    toks = []
+    with open(tokens_path, encoding="utf-8") as f:
+        for line in f:
+            parts = line.split()
+            if parts:
+                toks.append(parts[0])
+    lower = sum(t.islower() for t in toks) >= sum(t.isupper() for t in toks)
+    names = set()
+    for b in books.BOOKS:
+        for n in (b.name,) + b.spoken:
+            n = n.replace("'", "")
+            if n[:1].isdigit():
+                n = n[2:]
+            if len(n) > 3:
+                names.add(n.lower() if lower else n.upper())
+    folder = os.path.join(paths.config_dir(), "hotwords")
+    os.makedirs(folder, exist_ok=True)
+    tag = os.path.basename(os.path.dirname(os.path.abspath(tokens_path)))
+    vocab = os.path.join(folder, tag + ".vocab")
+    hotwords = os.path.join(folder, tag + ".hotwords.txt")
+    with open(vocab, "w", encoding="utf-8") as f:
+        for t in toks:
+            if not t.startswith("<"):
+                f.write("%s\t0\n" % t)
+    with open(hotwords, "w", encoding="utf-8") as f:
+        f.write("\n".join(sorted(names)) + "\n")
+    return hotwords, vocab
+
+
 class SherpaOnlineEngine(object):
     """Streaming transducer (Kroko): partial results while speaking, final at each pause."""
 
@@ -374,11 +411,27 @@ class SherpaOnlineEngine(object):
         if so is None:
             raise RuntimeError("sherpa-onnx is not available: %s" % SHERPA_ERROR)
         self.info = info
-        self.rec = so.OnlineRecognizer.from_transducer(
+        kwargs = dict(
             tokens=info.file("tokens", "tokens.txt"), encoder=info.file("encoder", "encoder.onnx"),
             decoder=info.file("decoder", "decoder.onnx"), joiner=info.file("joiner", "joiner.onnx"),
             num_threads=num_threads, enable_endpoint_detection=True,
             rule1_min_trailing_silence=2.4, rule2_min_trailing_silence=0.8, rule3_min_utterance_length=20.0)
+        hot = None
+        if info.manifest.get("hotwords", info.id == "kroko"):
+            try:
+                hot = book_hotwords(info.file("tokens", "tokens.txt"))
+            except Exception:
+                log.warning("could not prepare hotwords for %s", info.label, exc_info=True)
+        if hot is not None:
+            try:
+                self.rec = so.OnlineRecognizer.from_transducer(
+                    decoding_method="modified_beam_search", max_active_paths=4, hotwords_file=hot[0],
+                    hotwords_score=1.5, modeling_unit="bpe", bpe_vocab=hot[1], **kwargs)
+            except Exception:
+                log.warning("hotwords rejected by %s; using plain decoding", info.label, exc_info=True)
+                hot = None
+        if hot is None:
+            self.rec = so.OnlineRecognizer.from_transducer(**kwargs)
         self.stream = self.rec.create_stream()
         self._partial = ""
         self._resampler = None  # type: Optional[Resampler]

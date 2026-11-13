@@ -282,3 +282,14 @@ def test_combined_model_is_chosen_automatically_on_big_machines():
     assert m.id == "both" and m.engine == "dual"
     m, _ = recognizer.choose_model(infos, "auto", ram_gb=4, is64=True, available=lambda e: True)
     assert m.id == "kroko"
+
+
+def test_book_hotwords_files(tmp_path, monkeypatch):
+    monkeypatch.setenv("BIVERSE_CONFIG_DIR", str(tmp_path / "cfg"))
+    tokens = tmp_path / "model" / "tokens.txt"
+    tokens.parent.mkdir()
+    tokens.write_text("<blk> 0\n▁the 1\nss 2\n", encoding="utf-8")
+    hot, vocab = recognizer.book_hotwords(str(tokens))
+    words = open(hot, encoding="utf-8").read().split("\n")
+    assert "habakkuk" in words and "thessalonians" in words and "song of solomon" in words
+    assert open(vocab, encoding="utf-8").read() == "▁the\t0\nss\t0\n"

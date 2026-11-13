@@ -127,6 +127,32 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   detections) and Parakeet (VAD phrases) on the same audio. Kroko's finals feed the detector on
   their own channel and stay grey in the transcript until Parakeet's line replaces them.
   "Automatic" prefers it when the pack is installed and the machine qualifies for Parakeet.
+- **Hotwords: on for Kroko, off for Parakeet (v1.2).** Measured on 528 synthetic clips (all 66
+  books in "turn with me to <book> chapter X verse Y", 4 voices US/UK/Indian/South African,
+  clean and noisy), all with the same final parser:
+
+  | Setup | References caught |
+  |---|---|
+  | Parakeet | 499/528 (94.5 %) |
+  | Parakeet + hotwords (1.5) | 496/528 (93.9 %) |
+  | Kroko | 413/528 (78.2 %) |
+  | Kroko + hotwords (1.5) | 421/528 (79.7 %) |
+  | Kroko + Parakeet together | **502/528 (95.1 %)** |
+
+  On 96 ordinary-speech clips every setup had 0 false alarms. Parakeet already knows the rare
+  names; its misses are near-miss spellings ("Habakku", "Nebamiah"), so the fuzzy name match
+  helps more than biasing does. Hotwords at 2.0 started breaking "2 John" and "Haggai".
+  Hotwords use modified beam search (4 paths) with a BPE vocab generated from the model's
+  tokens.txt into the settings folder. If a model rejects them, BiVerse falls back to plain
+  decoding.
+- **Near-miss book names** are matched with difflib (ratio ≥ 0.75, a clear margin over the
+  next book, at least 5 letters, not a common English word). They count only when "chapter N"
+  or "N verse M" follows. They get confidence 0.6, below the Auto-mode threshold of 0.65, so
+  in Auto mode they go to Preview. A relative "verse N" never fires right after a number, so
+  "<garbled book> chapter 3 verse 5" cannot become verse 5 of the chapter on screen.
+- **The streaming flush pads 1.5 s of silence.** With 0.5 s, Kroko dropped the last word
+  ("verse fi…"). The first benchmark run had this flaw, and it was corrected before the table
+  above.
 - **Reference-only second recogniser (v1.1).** Real use showed the small model turning
   "genesis two eighteen" into "genesis to a team". A second Vosk recogniser with a grammar of
   book names, number words and reference keywords now runs on the same audio. On 84
