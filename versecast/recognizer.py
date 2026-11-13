@@ -1,8 +1,17 @@
-"""Offline speech recognition with Vosk, off the UI thread.
+"""Offline speech recognition, off the UI thread.
 
-``SpeechEngine`` loads the model in a background thread (it takes seconds)
-and runs a recogniser thread while listening. Results and detections are
-posted to the UI's event queue as tuples:
+Three engines share one interface (``accept(rate, pcm) -> [(kind, text)]``):
+
+* **Kroko** (sherpa-onnx streaming zipformer): live, light. The default.
+* **Parakeet** (sherpa-onnx NeMo transducer + Silero VAD): the most accurate,
+  needs a 64-bit computer with plenty of RAM. Installed from a model pack.
+  Speech is cut into phrases at pauses by the VAD and each phrase is decoded.
+* **Vosk** (classic): kept as a fallback for computers where sherpa-onnx's
+  ONNX Runtime does not load (e.g. Windows 7). Runs the optional
+  reference-only grammar recogniser alongside.
+
+``SpeechEngine`` picks and loads a model in the background and runs the
+recogniser thread while listening. It posts to the UI's event queue:
 
     ("model", "loading" | "ready" | "missing" | "error", detail)
     ("partial", text)
@@ -19,14 +28,13 @@ import os
 import queue
 import threading
 import time
-from typing import List, Optional
+from array import array
+from typing import List, Optional, Tuple
 
-from . import paths
+from . import paths, sysinfo
 from .detector import REFERENCE, Detector
 
 log = logging.getLogger(__name__)
-
-DEFAULT_MODEL = "vosk-model-small-en-us-0.15"
 
 try:
     import vosk
@@ -35,42 +43,219 @@ except Exception as exc:  # pragma: no cover - depends on the machine
     vosk = None
     VOSK_ERROR = str(exc)
 
+_sherpa = None
+SHERPA_ERROR = None  # type: Optional[str]
 
-def is_model_dir(path: str) -> bool:
-    if not path or not os.path.isdir(path):
-        return False
-    has_am = os.path.isfile(os.path.join(path, "am", "final.mdl")) or os.path.isfile(
-        os.path.join(path, "final.mdl"))
+
+def sherpa():
+    """Import sherpa-onnx lazily; it can fail where ONNX Runtime cannot load (Windows 7)."""
+    global _sherpa, SHERPA_ERROR
+    if _sherpa is None and SHERPA_ERROR is None:
+        try:
+            import sherpa_onnx
+            _sherpa = sherpa_onnx
+        except Exception as exc:  # pragma: no cover - depends on the machine
+            SHERPA_ERROR = "%s: %s" % (type(exc).__name__, exc)
+            log.warning("sherpa-onnx unavailable: %s", SHERPA_ERROR)
+    return _sherpa
+
+
+# Model ids in order of preference for "automatic"
+AUTO_ORDER = ("parakeet", "kroko", "vosk-small")
+PARAKEET_MIN_RAM_GB = 6.0
+LABELS = {"kroko": "Kroko (live)", "parakeet": "Parakeet (high accuracy)", "vosk-small": "Vosk small (classic)"}
+
+
+# ----------------------------------------------------------------- discovery
+
+class ModelInfo(object):
+    __slots__ = ("path", "engine", "id", "label", "min_ram_gb", "manifest")
+
+    def __init__(self, path: str, engine: str, id: str, label: str, min_ram_gb: float = 0.0,
+                 manifest: Optional[dict] = None) -> None:
+        self.path = path
+        self.engine = engine
+        self.id = id
+        self.label = label
+        self.min_ram_gb = min_ram_gb
+        self.manifest = manifest or {}
+
+    def file(self, key: str, default: str = "") -> str:
+        name = self.manifest.get(key, default)
+        return os.path.join(self.path, name) if name else ""
+
+    def __repr__(self):  # pragma: no cover
+        return "ModelInfo(%s, %s)" % (self.id, self.path)
+
+
+def _is_vosk_dir(path: str) -> bool:
+    has_am = os.path.isfile(os.path.join(path, "am", "final.mdl")) or os.path.isfile(os.path.join(path, "final.mdl"))
     has_graph = (os.path.isdir(os.path.join(path, "graph")) or os.path.isfile(os.path.join(path, "HCLG.fst"))
                  or os.path.isfile(os.path.join(path, "HCLr.fst")))
     return has_am and has_graph
 
 
-def find_model(user_path: Optional[str] = None) -> Optional[str]:
-    """First model found in discovery order (spec §6).
+def is_model_dir(path: str) -> bool:
+    return detect_model(path) is not None
 
-    Each candidate may be a model folder itself or a folder containing models;
-    in the latter case the default small model is preferred.
-    """
-    for base in paths.model_search_dirs(user_path or None):
-        if is_model_dir(base):
-            return base
-        if not os.path.isdir(base):
-            continue
+
+def detect_model(path: str) -> Optional[ModelInfo]:
+    """What kind of model (if any) is in ``path``."""
+    if not path or not os.path.isdir(path):
+        return None
+    manifest_path = os.path.join(path, "biverse-model.json")
+    if os.path.isfile(manifest_path):
         try:
-            children = sorted(os.listdir(base))
-        except OSError:
-            continue
-        models = [os.path.join(base, c) for c in children if is_model_dir(os.path.join(base, c))]
-        if models:
-            for m in models:
-                if os.path.basename(m) == DEFAULT_MODEL:
-                    return m
-            return models[0]
+            with open(manifest_path, encoding="utf-8") as f:
+                m = json.load(f)
+            mid = m.get("id", os.path.basename(path))
+            return ModelInfo(path, m["engine"], mid, m.get("label", LABELS.get(mid, mid)),
+                             float(m.get("min_ram_gb", 0)), m)
+        except (OSError, ValueError, KeyError):
+            log.warning("bad model manifest in %s", path)
+    if _is_vosk_dir(path):
+        return ModelInfo(path, "vosk", "vosk-small" if "small" in path.lower() else "vosk",
+                         "Vosk (%s)" % os.path.basename(path))
+    # A sherpa-onnx transducer folder copied by hand (no manifest): guess from the name.
+    try:
+        files = os.listdir(path)
+    except OSError:
+        return None
+    pick = {}  # type: Dict[str, str]
+    for key in ("encoder", "decoder", "joiner"):
+        cands = sorted(f for f in files if f.startswith(key) and f.endswith(".onnx"))
+        if cands:
+            int8 = [c for c in cands if "int8" in c]
+            pick[key] = int8[0] if int8 else cands[0]
+    if len(pick) == 3 and "tokens.txt" in files:
+        base = os.path.basename(path).lower()
+        pick["tokens"] = "tokens.txt"
+        if "parakeet" in base or "nemo" in base:
+            vad = [f for f in files if f.startswith("silero_vad") and f.endswith(".onnx")]
+            if vad:
+                pick["vad"] = vad[0]
+                pick["model_type"] = "nemo_transducer"
+                return ModelInfo(path, "sherpa-offline", "parakeet", LABELS["parakeet"], PARAKEET_MIN_RAM_GB, pick)
+        elif "streaming" in base or "kroko" in base:
+            mid = "kroko" if "kroko" in base else base
+            return ModelInfo(path, "sherpa-online", mid, LABELS.get(mid, os.path.basename(path)), 0, pick)
     return None
 
 
+def discover_models(custom_path: Optional[str] = None) -> List[ModelInfo]:
+    """Every usable model in the search folders (spec §6 order), installed packs last."""
+    found = []  # type: List[ModelInfo]
+    seen = set()
+    dirs = paths.model_search_dirs(custom_path or None) + [paths.user_models_dir()]
+    for base in dirs:
+        candidates = [base]
+        if os.path.isdir(base):
+            try:
+                candidates += [os.path.join(base, c) for c in sorted(os.listdir(base))]
+            except OSError:
+                pass
+        for c in candidates:
+            info = detect_model(c)
+            if info is None:
+                continue
+            key = os.path.normcase(os.path.realpath(c))
+            if key not in seen:
+                seen.add(key)
+                found.append(info)
+    return found
+
+
+def engine_available(engine: str) -> bool:
+    if engine == "vosk":
+        return vosk is not None
+    return sherpa() is not None
+
+
+def choose_model(models: List[ModelInfo], preference: str = "auto", custom_path: str = "",
+                 ram_gb: Optional[float] = None, is64: Optional[bool] = None,
+                 available=engine_available) -> Tuple[Optional[ModelInfo], str]:
+    """Pick a model. Returns ``(model, reason)``; ``model`` is None if nothing fits."""
+    usable = [m for m in models if available(m.engine)]
+    if preference == "custom" and custom_path:
+        target = os.path.normcase(os.path.abspath(custom_path))
+        for m in usable:
+            if os.path.normcase(os.path.abspath(m.path)) == target:
+                return m, "chosen folder"
+        info = detect_model(custom_path)
+        if info is not None and available(info.engine):
+            return info, "chosen folder"
+        return None, "the chosen folder is not a supported speech model"
+    by_id = {}  # type: Dict[str, ModelInfo]
+    for m in usable:
+        by_id.setdefault(m.id, m)
+    if preference in by_id:
+        return by_id[preference], "chosen in Settings"
+    ram = sysinfo.total_ram_gb() if ram_gb is None else ram_gb
+    big_ok = (sysinfo.is_64bit() if is64 is None else is64) and (ram is None or ram >= PARAKEET_MIN_RAM_GB)
+    note = ""
+    if preference not in ("auto", "", "custom"):
+        note = "%s is not installed; " % LABELS.get(preference, preference)
+    for mid in AUTO_ORDER:
+        m = by_id.get(mid)
+        if m is None:
+            continue
+        if mid == "parakeet" and not big_ok:
+            note += "Parakeet needs a 64-bit computer with %d GB+ RAM; " % PARAKEET_MIN_RAM_GB
+            continue
+        return m, note + "automatic"
+    if usable:
+        return usable[0], note + "automatic"
+    return None, "no speech model found"
+
+
+# ------------------------------------------------------------------- audio helpers
+
+def pcm_to_floats(pcm: bytes) -> List[float]:
+    a = array("h")
+    a.frombytes(pcm[: len(pcm) - len(pcm) % 2])
+    return [x / 32768.0 for x in a]
+
+
+class Resampler(object):
+    """Streaming resampler to 16 kHz (box-filtered decimation for exact ratios, else linear)."""
+
+    def __init__(self, in_rate: int, out_rate: int = 16000) -> None:
+        self.in_rate = int(in_rate)
+        self.out_rate = int(out_rate)
+        self.step = self.in_rate / float(self.out_rate)
+        self.pos = 0.0
+        self.last = 0.0
+        self._carry = []  # type: List[float]
+
+    def __call__(self, samples: List[float]) -> List[float]:
+        if self.in_rate == self.out_rate:
+            return samples
+        ratio = self.in_rate // self.out_rate
+        if ratio * self.out_rate == self.in_rate:  # 48k, 32k: average groups (cheap anti-alias)
+            buf = self._carry + samples
+            n = len(buf) - len(buf) % ratio
+            self._carry = buf[n:]
+            return [sum(buf[i:i + ratio]) / ratio for i in range(0, n, ratio)]
+        if not samples:
+            return []
+        out = []
+        buf = [self.last] + samples  # index 0 is the previous block's last sample
+        pos = self.pos
+        limit = len(samples)
+        while pos < limit:
+            i = int(pos)
+            frac = pos - i
+            out.append(buf[i] * (1.0 - frac) + buf[i + 1] * frac)
+            pos += self.step
+        self.pos = pos - limit
+        self.last = samples[-1]
+        return out
+
+
+# ------------------------------------------------------------------------- engines
+
 def load_model(path: str):
+    """Load a Vosk model (classic engine)."""
     if vosk is None:
         raise RuntimeError("Vosk is not available: %s" % VOSK_ERROR)
     vosk.SetLogLevel(-1)
@@ -79,8 +264,7 @@ def load_model(path: str):
 
 def make_recognizer(model, samplerate: float, grammar: Optional[str] = None):
     if grammar:
-        # Vosk warns once per grammar word missing from the model's vocabulary
-        # (e.g. "philippians" in the small model). Expected, so keep it quiet.
+        # Vosk warns once per grammar word missing from the model's vocabulary. Expected.
         vosk.SetLogLevel(-2)
         try:
             rec = vosk.KaldiRecognizer(model, float(samplerate), grammar)
@@ -93,11 +277,7 @@ def make_recognizer(model, samplerate: float, grammar: Optional[str] = None):
 
 
 def supports_grammar(model_path: Optional[str]) -> bool:
-    """Models with a dynamic graph (small and "lgraph" models) accept a runtime grammar.
-
-    Big static-graph models (graph/HCLG.fst) do not; they are accurate enough
-    without the reference-only recogniser.
-    """
+    """Vosk models with a dynamic graph (small and "lgraph") accept a runtime grammar."""
     if not model_path:
         return False
     graph = os.path.join(model_path, "graph")
@@ -105,12 +285,7 @@ def supports_grammar(model_path: Optional[str]) -> bool:
 
 
 def reference_grammar() -> str:
-    """Vosk grammar (JSON word list) for the reference-only recogniser.
-
-    Only words that occur in references: book names and their spoken variants,
-    number words, "chapter", "verse" and range words, plus "[unk]" for
-    everything else. Words missing from a model's vocabulary are ignored by Vosk.
-    """
+    """Vosk grammar (JSON word list) for the reference-only recogniser."""
     from . import books
     from .numbers import TEENS, TENS, UNITS
 
@@ -126,8 +301,205 @@ def reference_grammar() -> str:
     return json.dumps(sorted(words) + ["[unk]"])
 
 
+class VoskEngine(object):
+    """Classic Vosk recogniser, plus the optional reference-only grammar recogniser."""
+
+    def __init__(self, info: ModelInfo) -> None:
+        self.info = info
+        self.model = load_model(info.path)
+        self.use_reference = True
+        self._grammar = reference_grammar()
+        self._rec = None
+        self._ref = None
+        self._rate = None
+        self._partial = ""
+
+    def accept(self, rate: int, pcm: bytes) -> List[Tuple[str, str]]:
+        out = []
+        if self._rec is None or rate != self._rate:
+            self._rec = make_recognizer(self.model, rate)
+            self._ref = None
+            self._rate = rate
+        want_ref = self.use_reference and supports_grammar(self.info.path)
+        if want_ref and self._ref is None:
+            self._ref = make_recognizer(self.model, rate, self._grammar)
+        elif not want_ref:
+            self._ref = None
+        if self._rec.AcceptWaveform(pcm):
+            text = json.loads(self._rec.Result()).get("text", "")
+            self._partial = ""
+            if text:
+                out.append(("final", text))
+        else:
+            partial = json.loads(self._rec.PartialResult()).get("partial", "")
+            if partial != self._partial:
+                self._partial = partial
+                out.append(("partial", partial))
+        if self._ref is not None and self._ref.AcceptWaveform(pcm):
+            text = json.loads(self._ref.Result()).get("text", "")
+            if text.replace("[unk]", "").strip():
+                out.append(("final_ref", text))
+        return out
+
+    def finish(self) -> List[Tuple[str, str]]:
+        out = []
+        if self._rec is not None:
+            text = json.loads(self._rec.FinalResult()).get("text", "")
+            if text:
+                out.append(("final", text))
+        if self._ref is not None:
+            text = json.loads(self._ref.FinalResult()).get("text", "")
+            if text.replace("[unk]", "").strip():
+                out.append(("final_ref", text))
+        self._rec = self._ref = None
+        return out
+
+
+class SherpaOnlineEngine(object):
+    """Streaming transducer (Kroko): partial results while speaking, final at each pause."""
+
+    def __init__(self, info: ModelInfo, num_threads: int = 2) -> None:
+        so = sherpa()
+        if so is None:
+            raise RuntimeError("sherpa-onnx is not available: %s" % SHERPA_ERROR)
+        self.info = info
+        self.rec = so.OnlineRecognizer.from_transducer(
+            tokens=info.file("tokens", "tokens.txt"), encoder=info.file("encoder", "encoder.onnx"),
+            decoder=info.file("decoder", "decoder.onnx"), joiner=info.file("joiner", "joiner.onnx"),
+            num_threads=num_threads, enable_endpoint_detection=True,
+            rule1_min_trailing_silence=2.4, rule2_min_trailing_silence=0.8, rule3_min_utterance_length=20.0)
+        self.stream = self.rec.create_stream()
+        self._partial = ""
+        self._resampler = None  # type: Optional[Resampler]
+        self._rate = None
+
+    def accept(self, rate: int, pcm: bytes) -> List[Tuple[str, str]]:
+        # Always feed 16 kHz: sherpa-onnx aborts the process if a stream's rate changes,
+        # and it would log every time it creates its own resampler.
+        if rate != self._rate or self._resampler is None:
+            self._resampler = Resampler(rate, 16000)
+            self._rate = rate
+        self.stream.accept_waveform(16000, self._resampler(pcm_to_floats(pcm)))
+        out = []
+        while self.rec.is_ready(self.stream):
+            self.rec.decode_stream(self.stream)
+        text = _result_text(self.rec.get_result(self.stream))
+        if self.rec.is_endpoint(self.stream):
+            if text:
+                out.append(("final", text))
+            self.rec.reset(self.stream)
+            self._partial = ""
+        elif text != self._partial:
+            self._partial = text
+            out.append(("partial", text))
+        return out
+
+    def finish(self) -> List[Tuple[str, str]]:
+        self.stream.accept_waveform(16000, [0.0] * 8000)
+        self.stream.input_finished()
+        while self.rec.is_ready(self.stream):
+            self.rec.decode_stream(self.stream)
+        text = _result_text(self.rec.get_result(self.stream))
+        self.stream = self.rec.create_stream()
+        self._partial = ""
+        return [("final", text)] if text else []
+
+
+class SherpaOfflineEngine(object):
+    """Whole-phrase model (Parakeet): the VAD cuts speech at pauses, each phrase is decoded."""
+
+    WINDOW = 512
+
+    def __init__(self, info: ModelInfo, num_threads: int = 2) -> None:
+        so = sherpa()
+        if so is None:
+            raise RuntimeError("sherpa-onnx is not available: %s" % SHERPA_ERROR)
+        self.info = info
+        self.rec = so.OfflineRecognizer.from_transducer(
+            encoder=info.file("encoder"), decoder=info.file("decoder"), joiner=info.file("joiner"),
+            tokens=info.file("tokens", "tokens.txt"), num_threads=num_threads,
+            model_type=info.manifest.get("model_type", "nemo_transducer"))
+        cfg = so.VadModelConfig()
+        cfg.silero_vad.model = info.file("vad", "silero_vad.onnx")
+        cfg.silero_vad.min_silence_duration = 0.45
+        cfg.silero_vad.min_speech_duration = 0.25
+        cfg.silero_vad.max_speech_duration = 12.0
+        cfg.silero_vad.threshold = 0.5
+        cfg.silero_vad.window_size = self.WINDOW
+        cfg.sample_rate = 16000
+        cfg.num_threads = 1
+        self.vad = so.VoiceActivityDetector(cfg, buffer_size_in_seconds=60)
+        self._resampler = None  # type: Optional[Resampler]
+        self._rate = None
+        self._buf = []  # type: List[float]
+        self._speaking = False
+
+    def accept(self, rate: int, pcm: bytes) -> List[Tuple[str, str]]:
+        if rate != self._rate or self._resampler is None:
+            self._resampler = Resampler(rate, 16000)
+            self._rate = rate
+        self._buf.extend(self._resampler(pcm_to_floats(pcm)))
+        out = []
+        n = len(self._buf) - len(self._buf) % self.WINDOW
+        for i in range(0, n, self.WINDOW):
+            self.vad.accept_waveform(self._buf[i:i + self.WINDOW])
+        self._buf = self._buf[n:]
+        speaking = self.vad.is_speech_detected()
+        if speaking and not self._speaking:
+            out.append(("partial", u"…"))
+        self._speaking = speaking
+        out.extend(self._segments())
+        return out
+
+    def _segments(self) -> List[Tuple[str, str]]:
+        out = []
+        while not self.vad.empty():
+            samples = self.vad.front.samples
+            self.vad.pop()
+            stream = self.rec.create_stream()
+            stream.accept_waveform(16000, samples)
+            self.rec.decode_stream(stream)
+            text = _result_text(stream.result)
+            if text:
+                out.append(("final", text))
+        return out
+
+    def finish(self) -> List[Tuple[str, str]]:
+        self.vad.flush()
+        out = self._segments()
+        self.vad.reset()
+        self._buf = []
+        self._speaking = False
+        return out
+
+
+def _result_text(result) -> str:
+    text = result if isinstance(result, str) else getattr(result, "text", "")
+    return (text or "").strip()
+
+
+def create_engine(info: ModelInfo, num_threads: int = 2):
+    if info.engine == "vosk":
+        return VoskEngine(info)
+    if info.engine == "sherpa-online":
+        return SherpaOnlineEngine(info, num_threads)
+    if info.engine == "sherpa-offline":
+        return SherpaOfflineEngine(info, num_threads)
+    raise ValueError("unknown engine %r" % info.engine)
+
+
+def transcribe(engine, rate: int, pcm: bytes, block_seconds: float = 0.2) -> List[str]:
+    """Feed raw mono int16 PCM through an engine; return the final texts (tests, self-test)."""
+    block = max(2, int(rate * block_seconds)) * 2
+    finals = []
+    for i in range(0, len(pcm), block):
+        finals += [t for k, t in engine.accept(rate, pcm[i:i + block]) if k == "final"]
+    finals += [t for k, t in engine.finish() if k == "final"]
+    return finals
+
+
 def transcribe_pcm(model, samplerate: int, pcm: bytes, chunk: int = 8000) -> List[str]:
-    """Run raw mono int16 PCM through a recogniser; return the final texts (tests, self-test)."""
+    """Vosk-only helper (classic engine tests)."""
     rec = make_recognizer(model, samplerate)
     out = []
     for i in range(0, len(pcm), chunk):
@@ -141,62 +513,103 @@ def transcribe_pcm(model, samplerate: int, pcm: bytes, chunk: int = 8000) -> Lis
     return out
 
 
+def find_model(user_path: Optional[str] = None, engine: Optional[str] = None) -> Optional[str]:
+    """Path of a model: the one "automatic" would choose, or the first of ``engine``."""
+    models = discover_models(user_path)
+    if engine:
+        for m in models:
+            if m.engine == engine:
+                return m.path
+        return None
+    info, _ = choose_model(models, "custom" if user_path else "auto", user_path or "")
+    return info.path if info else None
+
+
+# ------------------------------------------------------------------- the service
+
 class SpeechEngine(object):
     def __init__(self, events: "queue.Queue", detector: Detector) -> None:
         self.events = events
         self.detector = detector
         self.audio_queue = queue.Queue(maxsize=50)  # ~10 s of 0.2 s blocks
-        self.model = None
-        self.model_path = None  # type: Optional[str]
+        self.engine = None
+        self.info = None  # type: Optional[ModelInfo]
         self.state = "none"  # none | loading | ready | missing | error
+        self.reason = ""
         self._loader = None  # type: Optional[threading.Thread]
         self._worker = None  # type: Optional[threading.Thread]
         self._stop = threading.Event()
         self._load_token = 0
-        # Second, reference-only recogniser (see reference_grammar). Toggled from settings.
-        self.use_reference = True
-        self._grammar = reference_grammar()
+        self._use_reference = True
 
-    # -- model ------------------------------------------------------------------
-    def load(self, user_path: Optional[str] = None) -> None:
-        """Find and load the model in the background (replaces any loaded model)."""
+    @property
+    def model_path(self) -> Optional[str]:
+        return self.info.path if self.info else None
+
+    @property
+    def model_label(self) -> str:
+        return self.info.label if self.info else ""
+
+    @property
+    def use_reference(self) -> bool:
+        return self._use_reference
+
+    @use_reference.setter
+    def use_reference(self, value: bool) -> None:
+        self._use_reference = bool(value)
+        if isinstance(self.engine, VoskEngine):
+            self.engine.use_reference = self._use_reference
+
+    def set_engine(self, engine, info: Optional[ModelInfo] = None) -> None:
+        """Use an already-created engine (tests, tools)."""
+        self.engine = engine
+        self.info = info or getattr(engine, "info", None)
+        self.state = "ready"
+
+    # model ---------------------------------------------------------------------------
+    def load(self, preference: str = "auto", custom_path: str = "") -> None:
+        """Choose and load a model in the background (replaces any loaded model)."""
         self._load_token += 1
         token = self._load_token
-        path = find_model(user_path)
-        if path is None:
+        info, reason = choose_model(discover_models(custom_path or None), preference, custom_path)
+        self.reason = reason
+        if info is None:
             self.state = "missing"
-            self.model = None
-            self.events.put(("model", "missing", ""))
-            return
-        if vosk is None:
-            self.state = "error"
-            self.events.put(("model", "error", "Vosk could not be loaded: %s" % VOSK_ERROR))
+            self.engine = None
+            self.info = None
+            detail = reason
+            if SHERPA_ERROR:
+                detail += " (sherpa-onnx could not load: %s)" % SHERPA_ERROR
+            self.events.put(("model", "missing", detail))
             return
         self.state = "loading"
-        self.events.put(("model", "loading", path))
+        self.events.put(("model", "loading", info.label))
 
         def work():
             t = time.monotonic()
             try:
-                model = load_model(path)
+                engine = create_engine(info)
             except Exception as exc:
                 log.exception("model load failed")
                 if token == self._load_token:
                     self.state = "error"
-                    self.events.put(("model", "error", "%s: %s" % (path, exc)))
+                    self.events.put(("model", "error", "%s: %s" % (info.label, exc)))
                 return
             if token != self._load_token:
                 return
-            self.model = model
-            self.model_path = path
+            if isinstance(engine, VoskEngine):
+                engine.use_reference = self._use_reference
+            self.engine = engine
+            self.info = info
             self.state = "ready"
-            log.info("model %s loaded in %.1f s", path, time.monotonic() - t)
-            self.events.put(("model", "ready", path))
+            log.info("speech model %s (%s) loaded in %.1f s [%s]", info.label, info.path,
+                     time.monotonic() - t, reason)
+            self.events.put(("model", "ready", info.label))
 
         self._loader = threading.Thread(target=work, name="model-loader", daemon=True)
         self._loader.start()
 
-    # -- recognition ---------------------------------------------------------------
+    # recognition -----------------------------------------------------------------------
     @property
     def running(self) -> bool:
         return self._worker is not None and self._worker.is_alive()
@@ -209,7 +622,7 @@ class SpeechEngine(object):
         self._worker = threading.Thread(target=self._run, name="recognizer", daemon=True)
         self._worker.start()
 
-    def stop(self, timeout: float = 2.0) -> None:
+    def stop(self, timeout: float = 3.0) -> None:
         self._stop.set()
         worker, self._worker = self._worker, None
         if worker is not None:
@@ -224,71 +637,39 @@ class SpeechEngine(object):
             pass
 
     def _run(self) -> None:
-        rec = None
-        ref_rec = None
-        rate = None
-        last_partial = ""
+        engine = None
         while not self._stop.is_set():
             try:
-                item = self.audio_queue.get(timeout=0.2)
+                rate, data = self.audio_queue.get(timeout=0.2)
             except queue.Empty:
                 continue
-            model = self.model
-            if model is None:
+            engine = self.engine
+            if engine is None:
                 continue  # model still loading: drop audio
-            samplerate, data = item
             try:
-                if rec is None or samplerate != rate:
-                    rec = make_recognizer(model, samplerate)
-                    ref_rec = None
-                    rate = samplerate
-                want_ref = self.use_reference and supports_grammar(self.model_path)
-                if want_ref and ref_rec is None:
-                    ref_rec = make_recognizer(model, samplerate, self._grammar)
-                elif not want_ref:
-                    ref_rec = None
-                if rec.AcceptWaveform(data):
-                    text = json.loads(rec.Result()).get("text", "")
-                    last_partial = ""
-                    if text:
-                        self._final(text)
-                else:
-                    partial = json.loads(rec.PartialResult()).get("partial", "")
-                    if partial != last_partial:
-                        last_partial = partial
-                        self.events.put(("partial", partial))
-                if ref_rec is not None and ref_rec.AcceptWaveform(data):
-                    self._final_reference(json.loads(ref_rec.Result()).get("text", ""))
+                for kind, text in engine.accept(rate, data):
+                    self._emit(kind, text)
             except Exception as exc:
                 log.exception("recogniser error")
                 self.events.put(("error", "speech recognition error: %s" % exc))
-                rec = None
-                ref_rec = None
-        if rec is not None:
+        if engine is not None:
             try:
-                text = json.loads(rec.FinalResult()).get("text", "")
-                if text:
-                    self._final(text)
-                if ref_rec is not None:
-                    self._final_reference(json.loads(ref_rec.FinalResult()).get("text", ""))
+                for kind, text in engine.finish():
+                    self._emit(kind, text)
             except Exception:
-                pass
+                log.exception("recogniser flush failed")
 
-    def _final_reference(self, text: str) -> None:
-        """Result of the reference-only recogniser: detections only, never the transcript."""
-        if not text or not text.replace("[unk]", "").strip():
+    def _emit(self, kind: str, text: str) -> None:
+        if kind == "partial":
+            self.events.put(("partial", text))
             return
-        log.debug("reference recogniser: %s", text)
+        if kind == "final_ref":
+            events = self.detector.feed_final(text, channel=REFERENCE)
+        else:
+            self.events.put(("final", text))
+            events = self.detector.feed_final(text)
         try:
-            for kind, det in self.detector.feed_final(text, channel=REFERENCE):
-                self.events.put(("detect", kind, det))
-        except Exception:
-            log.exception("detector error on %r", text)
-
-    def _final(self, text: str) -> None:
-        self.events.put(("final", text))
-        try:
-            for kind, det in self.detector.feed_final(text):
-                self.events.put(("detect", kind, det))
+            for k, det in events:
+                self.events.put(("detect", k, det))
         except Exception:
             log.exception("detector error on %r", text)

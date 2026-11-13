@@ -26,11 +26,13 @@ jobs:
             python: "3.8.10"
             arch: x64
             reqs: requirements-legacy.txt
+            models: kroko,vosk-small
           - name: windows-legacy-x86
             os: windows-2022
             python: "3.8.10"
             arch: x86
             reqs: requirements-legacy.txt
+            models: kroko,vosk-small
           - name: windows-x64
             os: windows-latest
             python: "3.12"
@@ -42,7 +44,8 @@ jobs:
             python: "3.8.10-pkg"
             arch: x64
             reqs: requirements-legacy.txt
-            macos_min: "10.13"
+            # sherpa-onnx's macOS wheels need 10.15
+            macos_min: "10.15"
           - name: macos-arm
             os: macos-15
             python: "3.12"
@@ -111,8 +114,9 @@ jobs:
           key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
       - name: Build Bible database
         run: '"$PY" tools/build_bible_db.py'
-      - name: Fetch speech model
-        run: '"$PY" tools/fetch_model.py'
+      - name: Fetch speech models
+        run: |
+          "$PY" tools/fetch_model.py --name "${{ matrix.models || 'kroko' }}"
       - name: Unit tests (non-GUI)
         run: '"$PY" -m pytest -q -x tests/test_parser.py tests/test_detector.py tests/test_bible.py tests/test_components.py'
 
@@ -120,6 +124,7 @@ jobs:
       - name: PyInstaller
         env:
           BIVERSE_MACOS_MIN: ${{ matrix.macos_min }}
+          BIVERSE_BUNDLE_MODELS: ${{ matrix.models || 'kroko' }}
         run: '"$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/versecast.spec'
 
       - name: Version
@@ -127,8 +132,9 @@ jobs:
 
       - name: Verify bundled native libraries
         run: |
-          find dist -iname "libvosk*" -o -iname "*portaudio*" | tee libs.txt
+          find dist -iname "libvosk*" -o -iname "*portaudio*" -o -iname "*onnxruntime*" | tee libs.txt
           grep -qi libvosk libs.txt
+          grep -qi onnxruntime libs.txt
           if [ "$RUNNER_OS" != "Linux" ]; then grep -qi portaudio libs.txt; fi
 
       - name: macOS - sign ad hoc, record deployment targets
@@ -204,6 +210,18 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: parakeet-${{ hashFiles('tools/fetch_model.py') }}
+      - name: High-accuracy model pack (Parakeet + Silero VAD)
+        run: |
+          VERSION=$(python -c 'import versecast; print(versecast.__version__)')
+          python tools/fetch_model.py --name parakeet --dest pack-models --pack "pack/BiVerse-model-pack-parakeet-$VERSION.zip"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -211,6 +229,7 @@ jobs:
         run: |
           mkdir release
           find artifacts -name "*.zip" -exec cp {} release/ \;
+          cp pack/*.zip release/
           cd release && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: GitHub Release
         env:

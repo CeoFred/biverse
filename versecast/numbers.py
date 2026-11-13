@@ -119,6 +119,11 @@ def tokenize(text, mode="speech"):
     text = (text or "").lower().replace(u"’", "'")
     if mode == "typed":
         text = _clean_typed(text)
+    else:
+        # Neural recognisers (Kroko, Parakeet) write "Genesis 2:18" or "verses 4-7".
+        text = re.sub(r"(\d)\s*[:.]\s*(?=\d)", r"\1 : ", text)
+        text = re.sub(u"(\\d)\\s*[%s]\\s*(?=\\d)" % _DASHES, r"\1 to ", text)
+        text = re.sub(r"(?<=[a-z])(?=\d)", " ", text)
     text = text.replace("'", "")
     # Keep ":" tokens (typed separator); drop everything else that is not a word.
     text = re.sub(r"[^a-z0-9:\s]", " ", text)

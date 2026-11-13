@@ -34,7 +34,8 @@ DEFAULTS = {
     "appearance": Appearance().to_dict(),
     "fit_range": False,             # fit a whole range on one slide when it fits
     "window_geometry": "",
-    "model_path": "",
+    "speech_model": "auto",          # auto | kroko | parakeet | vosk-small | custom
+    "model_path": "",               # folder used when speech_model == "custom"
     "strict_books": True,
     "relative_verses": True,
     "dedupe_window": 60,
@@ -69,6 +70,8 @@ def _merge(defaults: Dict[str, Any], loaded: Any) -> Dict[str, Any]:
 def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
     if data["mode"] not in ("manual", "auto"):
         data["mode"] = "manual"
+    if data["speech_model"] not in ("auto", "kroko", "parakeet", "vosk-small", "custom"):
+        data["speech_model"] = "auto"
     if not 0 <= data["dedupe_window"] <= 3600:
         data["dedupe_window"] = DEFAULTS["dedupe_window"]
     return data
@@ -96,6 +99,8 @@ class Settings(object):
                 pass
             return self
         self.data = _validate(_merge(DEFAULTS, loaded))
+        if "speech_model" not in loaded and self.data["model_path"]:
+            self.data["speech_model"] = "custom"  # 1.0 settings that chose a model folder
         return self
 
     def save(self) -> None:

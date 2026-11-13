@@ -7,6 +7,7 @@ import os
 import queue
 import subprocess
 import sys
+import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -77,7 +78,7 @@ class OperatorWindow(object):
         if settings["output_visible"]:
             self.output.show()
         self._render_all()
-        self.engine.load(settings["model_path"] or None)
+        self.engine.load(settings["speech_model"], settings["model_path"])
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(POLL_MS, self._poll)
 
@@ -462,14 +463,16 @@ class OperatorWindow(object):
             if self.engine.state == "loading":
                 self._status("Loading speech model…")
             elif self.capture.running:
-                self._status("Listening")
+                self._status("Listening \u2014 %s" % self.engine.model_label if self.engine.model_label
+                             else "Listening")
             elif self.capture.opening:
                 self._status("Opening audio device\u2026")
         else:
             self.listen_dot.configure(foreground="#888888")
             self.listen_btn.configure(text="Listen")
+            idle = "Idle \u2014 %s" % self.engine.model_label if self.engine.model_label else "Idle"
             self._status({"loading": "Loading speech model…", "missing": "No speech model",
-                          "error": "Speech model failed to load"}.get(self.engine.state, "Idle"),
+                          "error": "Speech model failed to load"}.get(self.engine.state, idle),
                          error=self.engine.state in ("missing", "error"))
 
     def _audio_watchdog(self) -> None:
@@ -527,6 +530,8 @@ class OperatorWindow(object):
             self._on_detection(ev[1], ev[2])
         elif kind == "model":
             self._on_model(ev[1], ev[2])
+        elif kind == "pack":
+            self._on_pack(ev[1], ev[2])
         elif kind == "audio":
             self._on_audio(ev[1], ev[2])
         elif kind == "error":
@@ -535,17 +540,44 @@ class OperatorWindow(object):
     def _on_model(self, state: str, detail: str) -> None:
         if state == "missing":
             self._set_banner(
-                "No speech model found, so listening is off. Manual search and projection still work.\n"
-                "To fix: put the vosk-model-small-en-us-0.15 folder into a 'models' folder next to %s, or use "
-                "Settings → Speech → Choose speech model folder… (see the User Guide)." % APP_NAME)
+                "No speech model could be used (%s), so listening is off. Manual search and projection still "
+                "work.\nTo fix: re-extract the %s download, or use Settings \u2192 Speech to choose or install a "
+                "model (see the User Guide)." % (detail, APP_NAME))
         elif state == "error":
-            self._set_banner("The speech model could not be loaded: %s\nChoose another model folder in "
-                             "Settings → Speech." % detail)
+            self._set_banner("The speech model could not be loaded: %s\nChoose another model in "
+                             "Settings \u2192 Speech." % detail)
         else:
             self._set_banner("")
         if state == "ready":
             log.info("speech model ready: %s", detail)
         self._update_listen_ui()
+
+    def install_pack(self, zip_path: str) -> None:
+        """Install a model pack in the background; result arrives as a "pack" event."""
+        from . import modelpack
+        self._status("Installing speech model pack\u2026 (this can take a minute)")
+
+        def work():
+            try:
+                info = modelpack.install(zip_path)
+                self.events.put(("pack", True, info.label))
+            except Exception as exc:
+                log.exception("model pack install failed")
+                self.events.put(("pack", False, str(exc)))
+
+        threading.Thread(target=work, name="pack-install", daemon=True).start()
+
+    def _on_pack(self, ok: bool, detail: str) -> None:
+        if ok:
+            self._status("Installed %s" % detail)
+            messagebox.showinfo(APP_NAME, "%s is installed. %s will use it when the speech model is set to "
+                                "Automatic (on a 64-bit computer with enough memory) or when you choose it "
+                                "in Settings \u2192 Speech." % (detail, APP_NAME), parent=self.root)
+            self.reload_model()
+        else:
+            self._status("Model pack not installed", error=True)
+            messagebox.showerror(APP_NAME, "The model pack could not be installed:\n\n%s" % detail,
+                                 parent=self.root)
 
     def _set_banner(self, text: str) -> None:
         if text:
@@ -830,8 +862,8 @@ class OperatorWindow(object):
     def reload_model(self) -> None:
         if self.listening:
             self.stop_listening()
-        self.engine.model = None
-        self.engine.load(self.settings["model_path"] or None)
+        self.engine.engine = None
+        self.engine.load(self.settings["speech_model"], self.settings["model_path"])
 
     def show_shortcuts(self) -> None:
         messagebox.showinfo("Keyboard shortcuts", "\n".join([
@@ -850,7 +882,7 @@ class OperatorWindow(object):
         messagebox.showinfo("About %s" % APP_NAME, "%s %s\n\nFree, offline Bible verse projection from live "
                             "speech.\n\nTranslations: %s\nSpeech model: %s\n\nMIT licence. See "
                             "THIRD_PARTY_NOTICES.md for components and licences." % (
-                                APP_NAME, __version__, names, self.engine.model_path or "none"),
+                                APP_NAME, __version__, names, self.engine.model_label or "none"),
                             parent=self.root)
 
     def open_log_folder(self) -> None:

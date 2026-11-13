@@ -216,6 +216,15 @@ def _resolve(book, tail, verse_count, typed=False):
             and verse_count(book, chapter) == 0 and verse_count(book, chapter - chapter % 10) >= chapter % 10):
         return chapter - chapter % 10, chapter % 10, chapter % 10, True, end, True
 
+    # Recognisers that write digits sometimes join chapter and verse: "Philippians 413",
+    # "John 316". Split a number that is not a chapter where the pieces are valid.
+    if verse is None and not typed and chapter >= 100 and verse_count(book, chapter) == 0:
+        digits = str(chapter)
+        for k in range(1, len(digits)):
+            c, v = int(digits[:k]), digits[k:]
+            if not v.startswith("0") and 1 <= int(v) <= verse_count(book, c):
+                return c, int(v), int(v), True, end, True
+
     if verse is not None:
         vc = verse_count(book, chapter)
         if vc == 0 or verse < 1 or verse > vc:

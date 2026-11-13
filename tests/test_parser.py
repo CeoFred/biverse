@@ -174,6 +174,13 @@ def test_sixty_six_books():
     ("look two people came", []),
     ("our collections three times a year", []),
     ("sam twenty three", []),
+    # neural recognisers write digits and colons
+    ("That is Genesis 2:18.", ["Genesis 2:18"]),
+    ("Turn to John 3:16-18, please.", ["John 3:16-18"]),
+    ("Philippians 413 says I can do all things", ["Philippians 4:13"]),
+    ("Romans 828", ["Romans 8:28"]),
+    ("First Corinthians 13:4 to 7", ["1 Corinthians 13:4-7"]),
+    ("my job 365 days a year", []),  # strict book: merged digits are not trusted
     ("john three sixteen to ninety", ["John 3:16-36"]),  # range end clamped
     ("john three eighteen to sixteen", ["John 3:18"]),  # backwards range ignored
 ])

@@ -2,6 +2,9 @@
 # vosk 0.3.44 exactly: 0.3.45 has no macOS wheel.
 vosk==0.3.44
 sounddevice==0.5.6
+# speech engines: Kroko (live) and Parakeet (pack) via sherpa-onnx; no numpy needed
+sherpa-onnx==2.0.1
+sherpa-onnx-core==2.0.1
 # vosk's own dependencies, pinned to versions that still support Python 3.8
 cffi==1.17.1
 requests==2.32.4

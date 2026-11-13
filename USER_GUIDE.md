@@ -30,7 +30,8 @@ Download the right file from the project's **Releases** page.
 | Windows 7 or 8, 64-bit | `BiVerse-…-windows-legacy-x64.zip` |
 | Windows 7 or 8, 32-bit (older netbooks) | `BiVerse-…-windows-legacy-x86.zip` |
 | Mac with Apple Silicon (M1, M2, M3, M4…) | `BiVerse-…-macos-arm.zip` |
-| Mac with an Intel processor, macOS 10.13 or newer | `BiVerse-…-macos-intel.zip` (also runs on Apple Silicon) |
+| Mac with an Intel processor, macOS 10.15 or newer | `BiVerse-…-macos-intel.zip` (also runs on Apple Silicon) |
+| Optional, for the best recognition (see section 9) | `BiVerse-model-pack-parakeet-….zip` |
 
 To check your Windows type: **Start → right-click Computer / This PC → Properties**, then look
 at "System type". To check your Mac: **Apple menu → About This Mac**, then look at "Chip" or
@@ -231,10 +232,9 @@ Open **⚙ Settings**.
 - **Speech:** which speech model to use (see below).
 - **Detection:** strict book names, relative verses, how long to ignore repeats (60 seconds
   by default), and the Auto-mode safety option.
-- **Extra reference listener** (Detection tab, on by default): a second listener that only knows
-  book names and numbers. It catches references the main one mishears, such as "genesis two
-  eighteen" heard as "genesis to a team". It only adds references with both a chapter and a
-  verse. It roughly doubles the CPU used for listening, so turn it off on a very slow computer.
+- **Extra reference listener** (Detection tab; only used by the classic model): a second
+  listener that only knows book names and numbers, which helps the classic model catch
+  references it mishears. It roughly doubles the CPU used for listening.
 - **Test output** shows a sample verse on the projector.
 
 BiVerse remembers everything (devices, display, translation, mode and appearance) for next
@@ -242,27 +242,32 @@ time.
 
 ---
 
-## 9. Installing a bigger speech model
+## 9. Speech models: getting the best recognition
 
-BiVerse comes with a small English model (about 40 MB) that runs on old laptops. **If your
-computer has 4 GB of RAM or more, install a bigger model: it is the single biggest
-improvement to detection.** It recognises speech much more accurately, especially with
-accents or a room microphone, but needs more memory and a faster computer.
+BiVerse can use three speech models. **Settings → Speech** shows which one is in use.
 
-The small model does not know some book names at all, so it cannot detect these books when
-they are spoken: **Thessalonians, Haggai, Habakkuk, Deuteronomy, Zephaniah** and often
-**Philemon**. Philippians, Zechariah, Malachi, Galatians, Colossians and Ephesians usually work
-through common mis-hearings. Search still finds every book.
+| Model | Best for | Needs |
+|---|---|---|
+| **Kroko** (built in) | Every computer. Words appear live as the preacher speaks. | Any computer |
+| **Parakeet** (free model pack) | The most accurate, by far the best with African and other accents. The verse appears a moment after the preacher pauses. | A 64-bit computer with about 6 GB of RAM or more |
+| **Classic** (Vosk, Windows 7/8 downloads only) | Old Windows 7 computers where Kroko cannot run | Any computer |
 
-1. On any computer with internet, go to **alphacephei.com/vosk/models** and download an
-   English model, for example **vosk-model-en-us-0.22-lgraph** (about 130 MB, needs about
-   1 GB of RAM).
-2. Unzip it. You get a folder containing `am`, `conf`, `graph` and so on.
-3. Copy that folder to the church computer.
-4. In BiVerse, go to **Settings → Speech → Choose speech model folder…** and select it.
+In tests with Nigerian English speakers, Parakeet got about 1 word in 14 wrong; Kroko about
+1 in 5; the classic model about 1 in 3.
 
-Alternatively, put the model folder into a folder called `models` next to BiVerse.exe (or next
-to BiVerse.app).
+**Installing the Parakeet pack (recommended if your computer can run it):**
+
+1. On any computer with internet, download `BiVerse-model-pack-parakeet-….zip` (about 500 MB)
+   from the same Releases page as BiVerse. Copy it to the church computer if needed.
+2. In BiVerse, open **Settings → Speech → Install model pack…** and choose the zip.
+3. Wait for "installed" (about a minute). With the model set to **Automatic**, BiVerse now uses
+   Parakeet whenever the computer can run it, and falls back to Kroko otherwise.
+
+The pack is kept in your settings folder, so it survives BiVerse updates. To force a particular
+model, choose it in Settings → Speech.
+
+**Other models.** Settings → Speech → "A model folder I choose" accepts a Vosk model folder
+(from alphacephei.com/vosk/models) or a folder prepared by BiVerse's `tools/fetch_model.py`.
 
 ---
 
@@ -310,8 +315,7 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
   speech model is mishearing; the words are not reaching BiVerse cleanly.
 - Use a cleaner feed (from the desk rather than a microphone in the room). A laptop microphone
   picking up a loudspeaker is the hardest case.
-- Install a bigger speech model (section 9).
-- Make sure Settings → Detection → **Extra reference listener** is on.
+- Install the Parakeet model pack (section 9). It is the single biggest improvement.
 - Check that **strict book names** are not the cause: "John three" alone is not enough, but
   "John chapter three" is.
 
@@ -327,7 +331,8 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
 in and press the **⟳** button next to Input or Output. While listening, BiVerse also retries
 the microphone by itself every few seconds.
 
-**"No speech model found" banner.** The `models` folder is missing. Re-extract the download,
+**"No speech model could be used" banner.** The `models` folder is missing, or (on an old
+computer) the model could not start. Re-extract the download,
 or choose a model folder in Settings → Speech. Search and projection still work without one.
 
 **macOS says the app is damaged or from an unidentified developer.** See *Installing → macOS*

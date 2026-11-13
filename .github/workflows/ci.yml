@@ -54,8 +54,8 @@ jobs:
           key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
       - name: Build Bible database
         run: python tools/build_bible_db.py
-      - name: Fetch speech model
-        run: python tools/fetch_model.py
+      - name: Fetch speech models
+        run: python tools/fetch_model.py --name kroko,vosk-small
       - name: Tests
         run: xvfb-run -a python -m pytest -q -rs
       - name: Self-test from source
@@ -75,7 +75,7 @@ jobs:
         with:
           path: data/cache
           key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
-      - run: python tools/build_bible_db.py && python tools/fetch_model.py
+      - run: python tools/build_bible_db.py && python tools/fetch_model.py --name kroko
       - name: Operator window at 1024x600 and 1920x1080, projector output at 1920x1080
         run: |
           xvfb-run -a -s "-screen 0 1024x600x24"  python tools/screenshots.py operator shots/operator-1024x600.png
@@ -85,3 +85,29 @@ jobs:
         with:
           name: screenshots
           path: shots/
+
+  parakeet:
+    # The high-accuracy pack is large (~480 MB), so it gets its own cached job.
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      BIVERSE_REQUIRE_VOSK: "1"
+      BIVERSE_REQUIRE_PARAKEET: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libportaudio2 espeak-ng
+      - run: pip install -r requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: parakeet-${{ hashFiles('tools/fetch_model.py') }}
+      - run: python tools/fetch_model.py --name parakeet
+      - name: Parakeet recognition test
+        run: python -m pytest -q -rs tests/test_recognition.py -k parakeet
+      - name: Build the model pack and install it like a user would
+        run: |
+          python tools/fetch_model.py --name parakeet --pack pack.zip
+          python -c "from versecast import modelpack; print(modelpack.install('pack.zip', 'installed').label)"

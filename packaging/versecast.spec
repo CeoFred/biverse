@@ -10,6 +10,7 @@
 #   BIVERSE_ENTITLEMENTS    optional entitlements plist for that signing
 
 import glob
+import json
 import os
 import re
 import sys
@@ -24,24 +25,37 @@ with open(os.path.join(ROOT, "versecast", "__init__.py"), encoding="utf-8") as f
     VERSION = re.search(r'__version__ = "([^"]+)"', f.read()).group(1)
 PI_MAJOR = int(PyInstaller.__version__.split(".")[0])
 APP = "BiVerse"
-MODEL = "vosk-model-small-en-us-0.15"
+# Speech models to bundle, by manifest id (tools/fetch_model.py installs them):
+# every build bundles Kroko; Windows legacy builds add the classic Vosk model as
+# a fallback for Windows 7, where ONNX Runtime may not load.
+BUNDLE_MODELS = [m.strip() for m in os.environ.get("BIVERSE_BUNDLE_MODELS", "kroko").split(",") if m.strip()]
 
-# -- data ------------------------------------------------------------------------
 db = os.path.join(ROOT, "data", "bible.db")
-model_dir = os.path.join(ROOT, "models", MODEL)
-for required in (db, model_dir):
-    if not os.path.exists(required):
-        raise SystemExit("missing %s - run tools/build_bible_db.py and tools/fetch_model.py first" % required)
+if not os.path.exists(db):
+    raise SystemExit("missing %s - run tools/build_bible_db.py first" % db)
 
 datas = [
     (db, "data"),
     (os.path.join(ROOT, "assets"), "assets"),
 ]
-for dirpath, _dirs, files in os.walk(model_dir):
-    for name in files:
-        src = os.path.join(dirpath, name)
-        rel = os.path.relpath(dirpath, os.path.join(ROOT, "models"))
-        datas.append((src, os.path.join("models", rel)))
+bundled = {}
+models_root = os.path.join(ROOT, "models")
+for name in sorted(os.listdir(models_root)) if os.path.isdir(models_root) else []:
+    manifest = os.path.join(models_root, name, "biverse-model.json")
+    if not os.path.isfile(manifest):
+        continue
+    with open(manifest, encoding="utf-8") as f:
+        mid = json.load(f).get("id")
+    if mid in BUNDLE_MODELS and mid not in bundled:
+        bundled[mid] = name
+        for dirpath, _dirs, files in os.walk(os.path.join(models_root, name)):
+            for fname in files:
+                rel = os.path.relpath(dirpath, models_root)
+                datas.append((os.path.join(dirpath, fname), os.path.join("models", rel)))
+missing = [m for m in BUNDLE_MODELS if m not in bundled]
+if missing:
+    raise SystemExit("models not installed: %s - run tools/fetch_model.py --name %s" % (missing, ",".join(missing)))
+print("bundling speech models:", bundled)
 
 # -- native libraries ------------------------------------------------------------------
 # Vosk loads libvosk (.dll / .so / .dyld - note the unusual macOS extension) from
@@ -75,7 +89,17 @@ def _keep(entry):
 # sounddevice ships PortAudio in _sounddevice_data; packaging/hooks/hook-sounddevice.py
 # collects only this platform's library (overrides the contrib hook).
 
-hiddenimports = ["_cffi_backend", "vosk.vosk_cffi"]
+# sherpa-onnx (Kroko / Parakeet engines): its extension and ONNX Runtime live in sherpa_onnx/lib
+import sherpa_onnx  # noqa: E402
+
+sherpa_lib = os.path.join(os.path.dirname(sherpa_onnx.__file__), "lib")
+for p in sorted(glob.glob(os.path.join(sherpa_lib, "*"))):
+    if p.endswith((".so", ".pyd", ".dll", ".dylib")) or ".so." in os.path.basename(p):
+        binaries.append((p, os.path.join("sherpa_onnx", "lib")))
+if not any("onnxruntime" in os.path.basename(p) for p, _ in binaries):
+    raise SystemExit("ONNX Runtime library not found in %s" % sherpa_lib)
+
+hiddenimports = ["_cffi_backend", "vosk.vosk_cffi", "sherpa_onnx", "sherpa_onnx.lib._sherpa_onnx"]
 excludes = ["numpy", "PIL", "matplotlib", "PyQt5", "PySide2", "PySide6", "IPython", "pytest",
             "vosk.transcriber", "websockets"]
 
