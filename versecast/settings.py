@@ -41,6 +41,7 @@ DEFAULTS = {
     "dedupe_window": 60,
     "auto_requires_verse": True,    # auto mode only sends chapter AND verse live
     "voice_commands": True,         # spoken "next verse", "go back", "next chapter"
+    "follow_reading": True,         # follow the preacher reading and move to the next verse
     "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
 }  # type: Dict[str, Any]
 

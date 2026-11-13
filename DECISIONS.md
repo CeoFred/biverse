@@ -118,6 +118,28 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   verse 8" is a relative reference rather than a command: the UI tells the detector which book
   and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
   newest of that and the last detection.
+- **Following the reading (phase 2).** `versecast/follow.py` aligns the last 12 spoken words
+  (Kroko partials, about 5 updates a second) with the live verse in every installed translation,
+  using a fuzzy in-order longest common subsequence. Spoken and verse words count as equal if
+  identical, if they share a 4-letter prefix, or if their similarity ratio is at least 0.75.
+  - **End trigger:** the newest words reach the last word, or the third-to-last word for
+    verses of 16+ words, and half the verse (at least 3 words) has been matched.
+  - **Start trigger:** the newest 8 words match the opening of the next verse (or one or two
+    after it, for skipped verses), with at least 4 words in order, 2 of them content words
+    (not "and the for God…"), and they fit that verse better than the current one.
+  - **Guards:** 0.8 s minimum per verse. The end trigger never fires on the last verse of a
+    range; only reading the next verse aloud continues past it.
+  - **Mode:** following moves the live slide in Manual mode too, because the operator already
+    approved the passage. It does not follow while the screen is blank or black.
+
+  **Benchmark:** 7 passages (John 3:16–18, Psalm 23, Romans 8:28–31, Genesis 1:1–5,
+  1 Corinthians 13:4–8, Matthew 5:3–9, Philippians 4:6–8) × 4 voices (US, UK, Indian, South
+  African), 104 verse changes, run through the real Kroko engine:
+  - 104/104 followed, 0 wrong verses, 0 premature (before 60% of a verse).
+  - The slide changes a median of 0.31 s after the verse ends; 90 % within 1.03 s; worst 1.39 s.
+  - Romans 8:29 → 8:30 ("…he also did predestinate" vs "whom he did predestinate") caused two
+    premature moves until the "fits the current verse better" rule was added.
+  - Moving one word earlier on long verses cut the median from 0.49 s to 0.31 s.
 - **Navigation intents replace fixed phrases.** The v1.2 phrase list missed how preachers
   actually talk ("can we go back", "go back two verses", "back to the previous one") and
   misread "go back one more verse" as *next*. `commands.parse_intent` now combines an action,

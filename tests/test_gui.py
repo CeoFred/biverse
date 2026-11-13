@@ -296,3 +296,60 @@ def test_book_less_chapter_and_verse_detection(op):
     (kind, det), = op.detector.feed_final("now turn to chapter four verse two")
     op._on_detection(kind, det)
     assert op.live.selection.verse_label() == "Genesis 4:2"
+
+
+# -- phase 2: following the reading ---------------------------------------------------
+
+def _read_aloud(op, text):
+    ws = text.split()
+    for i in range(1, len(ws) + 1):
+        op.follower._since = -10.0  # skip the dwell time in tests
+        op._handle(("partial", " ".join(ws[:i])))
+
+
+def test_follow_moves_live_verse_as_reading_ends(op, bible):
+    _show(op, "john 3:16-18")  # Manual mode: following still moves the live slide
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:17"
+    assert op.live.selection.start == 16 and op.live.selection.end == 18  # still the same passage
+    _read_aloud(op, bible.verse("KJV", 43, 3, 17))
+    assert op.live.selection.verse_label() == "John 3:18"
+    _read_aloud(op, bible.verse("KJV", 43, 3, 18))
+    assert op.live.selection.verse_label() == "John 3:18"  # end of the range: stays
+
+
+def test_stop_there_and_continue(op, bible):
+    _show(op, "john 3:16-18")
+    _say(op, "let's stop there", 1)
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+    assert "Paused" in op.follow_label.cget("text")
+    _say(op, "let's continue", 5)
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:17"
+
+
+def test_follow_button_and_setting(op, bible):
+    _show(op, "john 3:16-18")
+    op.toggle_following()
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+    op.toggle_following()
+    op.settings["follow_reading"] = False
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    assert op.live.selection.verse_label() == "John 3:16"
+
+
+def test_operator_move_restarts_following(op, bible):
+    _show(op, "john 3:16-18")
+    op.step(1)  # operator jumps to 17 by hand
+    _read_aloud(op, bible.verse("KJV", 43, 3, 17))
+    assert op.live.selection.verse_label() == "John 3:18"
+
+
+def test_blank_screen_is_not_followed(op, bible):
+    _show(op, "john 3:16-18")
+    op.blank()
+    _read_aloud(op, bible.verse("KJV", 43, 3, 16))
+    op.blank()
+    assert op.live.selection.verse_label() == "John 3:16"

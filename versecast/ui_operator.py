@@ -55,6 +55,7 @@ class OperatorWindow(object):
         self._results = {}  # type: Dict[str, Selection]
         self._closing = False
         self._last_command = None
+        self._partials_seen = False
         self._passage_start = None  # (book, chapter, verse) of the passage last sent live
         self.following = True       # follow-the-reading on/off ("stop there" / "continue")
 
@@ -69,6 +70,10 @@ class OperatorWindow(object):
         self.engine.commands = settings["voice_commands"]
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
+        from .follow import ReadingFollower
+        codes = [c for c, _n, _l in bible.translations()]
+        self.follower = ReadingFollower(
+            lambda b, c, v: [t for t in (bible.verse(code, b, c, v) for code in codes) if t], bible.verse_count)
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
 
         root.title("%s %s" % (APP_NAME, __version__))
@@ -242,6 +247,10 @@ class OperatorWindow(object):
             row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
         ttk.Button(buttons, text="BLACK (Shift+Esc)", command=self.black).grid(
             row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(2, 0))
+        self.follow_btn = ttk.Button(buttons, text="Pause following (F6)", command=self.toggle_following)
+        self.follow_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
+        self.follow_label = tk.Label(buttons, text="", anchor="w")
+        self.follow_label.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(4, 0))
 
         sframe = ttk.LabelFrame(right, text="Search", padding=4)
         sframe.pack(fill="both", expand=True, padx=(6, 0))
@@ -277,6 +286,7 @@ class OperatorWindow(object):
 
     def _bind_keys(self) -> None:
         r = self.root
+        r.bind_all("<F6>", lambda e: self._key(self.toggle_following))
         for seq in ("<%s-Return>" % MOD, "<%s-KP_Enter>" % MOD, "<F5>"):
             r.bind_all(seq, lambda e: self._key(self.go_live))
         r.bind_all("<Escape>", lambda e: self._key(self.blank))
@@ -529,8 +539,13 @@ class OperatorWindow(object):
         kind = ev[0]
         if kind == "partial":
             self._set_partial(ev[1])
+            if ev[1] and ev[1] != u"\u2026":
+                self._partials_seen = True
+                self._follow(ev[1], final=False)
         elif kind == "final":
             self._add_final(ev[1])
+            if not self._partials_seen:  # Parakeet alone: only phrase-level text to follow
+                self._follow(ev[1], final=True)
         elif kind == "detect":
             self._on_detection(ev[1], ev[2])
         elif kind == "model":
@@ -751,8 +766,62 @@ class OperatorWindow(object):
 
     def set_following(self, on: bool, source: str = "") -> None:
         self.following = bool(on)
+        self.follower.paused = not self.following
+        if self.following:
+            self._restart_follower()
         self._status("Following the reading %s%s" % ("resumed" if on else "paused \u2014 say \"continue\" to resume",
                                                       " (voice)" if source else ""))
+        self._update_follow_ui()
+
+    def toggle_following(self) -> None:
+        self.set_following(not self.following)
+
+    def _follow_enabled(self) -> bool:
+        return (self.settings["follow_reading"] and self.following and self.live.selection is not None
+                and self.live.cover is None)
+
+    def _restart_follower(self) -> None:
+        sel = self.live.selection
+        if sel is None:
+            self.follower.stop()
+            return
+        end = sel.end if sel.is_range else None
+        self.follower.start(sel.book, sel.chapter, sel.cur, end, time.monotonic())
+
+    def _follow(self, text: str, final: bool) -> None:
+        """Feed recogniser text to the reading follower; move the live verse when it says so."""
+        if not self._follow_enabled():
+            return
+        sel = self.live.selection
+        f = self.follower
+        if (f.book, f.chapter, f.verse) != (sel.book, sel.chapter, sel.cur):
+            self._restart_follower()
+        move = f.feed(text, time.monotonic(), final=final)
+        if move is None:
+            self._update_follow_ui()
+            return
+        if sel.start <= move.verse <= sel.end:
+            new = sel.copy()
+            new.cur = move.verse
+            new.whole = False
+        else:
+            new = Selection(sel.book, sel.chapter, move.verse, move.verse)
+        log.info("following: %s -> verse %d (%s)", sel.verse_label(), move.verse, move.reason)
+        self.live.selection = new
+        self._render_live()
+        self._status("Following: %s" % new.verse_label())
+
+    def _update_follow_ui(self) -> None:
+        if not self.settings["follow_reading"]:
+            text, color = "Following off (Settings)", "#888888"
+        elif not self.following:
+            text, color = u"\u2016 Paused \u2014 say \"continue\"", "#c07000"
+        elif self.live.selection is None or self.live.cover is not None:
+            text, color = u"\u25cf Following (waiting for a verse)", "#888888"
+        else:
+            text, color = u"\u25cf Following  %d%%" % int(100 * self.follower.progress), "#1a8f3a"
+        self.follow_label.configure(text=text, foreground=color)
+        self.follow_btn.configure(text="Pause following (F6)" if self.following else "Resume following (F6)")
 
     def go_live(self) -> None:
         if self.preview is None:
@@ -799,6 +868,12 @@ class OperatorWindow(object):
         if self.live.selection is not None:
             # "move to verse 8" now means verse 8 of what is on screen
             self.detector.set_position(self.live.selection.book, self.live.selection.chapter)
+            f = self.follower
+            sel = self.live.selection
+            if (f.book, f.chapter, f.verse) != (sel.book, sel.chapter, sel.cur) or (
+                    f.range_end != (sel.end if sel.is_range else None)):
+                self._restart_follower()  # the operator, a command or a detection moved the slide
+        self._update_follow_ui()
         if self.live.cover == BLACK:
             text = "BLACK"
         elif self.live.cover == BLANK:
