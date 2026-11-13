@@ -152,7 +152,7 @@ def build_pack(target: str, out: str) -> None:
     """Zip an installed model folder as a BiVerse model pack."""
     os.makedirs(os.path.dirname(os.path.abspath(out)) or ".", exist_ok=True)
     base = os.path.basename(target.rstrip(os.sep))
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED) as zf:  # ONNX weights barely compress
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         zf.writestr("README.txt", PACK_README)
         for dirpath, _dirs, files in os.walk(target):
             for name in sorted(files):
