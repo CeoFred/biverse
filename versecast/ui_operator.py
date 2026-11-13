@@ -55,6 +55,8 @@ class OperatorWindow(object):
         self._results = {}  # type: Dict[str, Selection]
         self._closing = False
         self._last_command = None
+        self._passage_start = None  # (book, chapter, verse) of the passage last sent live
+        self.following = True       # follow-the-reading on/off ("stop there" / "continue")
 
         if not bible.has_translation(settings["translation"]):
             settings["translation"] = bible.default_translation()
@@ -687,26 +689,32 @@ class OperatorWindow(object):
         w, h = self.output.size
         return self.renderer.fits(text, self.settings.appearance, w, h)
 
-    def _on_command(self, cmd: str, channel: str, t: float, heard: str) -> None:
-        """A spoken navigation command ("next verse", "go back", "next chapter")."""
+    def _on_command(self, intent, channel: str, t: float, heard: str) -> None:
+        """A spoken navigation intent ("next verse", "go back two verses", "chapter 4",
+        "stop there", "let's continue")."""
+        if isinstance(intent, str):  # v1.2 command names
+            intent = {commands.NEXT_VERSE: commands.Intent(commands.STEP, commands.VERSE, 1),
+                      commands.PREV_VERSE: commands.Intent(commands.STEP, commands.VERSE, -1),
+                      commands.NEXT_CHAPTER: commands.Intent(commands.STEP, commands.CHAPTER, 1),
+                      commands.PREV_CHAPTER: commands.Intent(commands.STEP, commands.CHAPTER, -1)}[intent]
         last = self._last_command
-        # With both models running, Kroko and Parakeet each hear the same command.
-        if last and last[0] == cmd and last[1] != channel and t - last[2] < 3.0:
+        # With both models running, Kroko and Parakeet each hear the same words.
+        if last and last[0] == intent and last[1] != channel and t - last[2] < 3.0:
             return
-        self._last_command = (cmd, channel, t)
+        self._last_command = (intent, channel, t)
+        label = intent.label()
+        log.info("voice intent %s (%s): %r", label, channel, heard)
+        if intent.kind in (commands.STOP, commands.RESUME):
+            self.set_following(intent.kind == commands.RESUME, source="voice")
+            return
         base = self.live.selection or self.preview
-        label = commands.LABELS.get(cmd, cmd)
         if base is None:
             self._status("Heard \"%s\" but nothing is on screen" % label)
             return
-        if cmd in (commands.NEXT_VERSE, commands.PREV_VERSE):
-            new = step(self.bible, base, 1 if cmd == commands.NEXT_VERSE else -1)
-        else:
-            new = chapter_step(self.bible, base, 1 if cmd == commands.NEXT_CHAPTER else -1)
+        new = self._navigate(base, intent)
         if new is None:
-            self._status("Heard \"%s\" \u2014 already at the end" % label)
+            self._status("Heard \"%s\" \u2014 not possible from %s" % (label, base.verse_label()))
             return
-        log.info("voice command %s (%s): %r -> %s", cmd, channel, heard, new.status_label())
         if self.mode_var.get() == "auto":
             self.live.selection = new
             self.live.cover = None
@@ -716,13 +724,40 @@ class OperatorWindow(object):
             self.set_preview(new)
             self._status("Voice: %s \u2192 %s in Preview (press Go Live)" % (label, new.verse_label()))
 
+    def _navigate(self, base: Selection, intent) -> Optional[Selection]:
+        if intent.kind == commands.STEP:
+            sel = base
+            for _ in range(abs(intent.delta)):
+                d = 1 if intent.delta > 0 else -1
+                nxt = step(self.bible, sel, d) if intent.unit == commands.VERSE else chapter_step(self.bible, sel, d)
+                if nxt is None:
+                    break
+                sel = nxt
+            return None if sel is base else sel
+        if intent.kind == commands.GOTO:
+            if intent.where == "chapter_start":
+                return Selection(base.book, base.chapter, 1, 1)
+            if intent.where == "passage_start":
+                start = self._passage_start or (base.book, base.chapter, base.start)
+                return Selection(start[0], start[1], start[2], start[2])
+            c, v = intent.chapter, intent.verse or 1
+            if self.bible.verse_count(base.book, c) >= v:
+                return Selection(base.book, c, v, v)
+        return None
+
     def set_preview(self, sel: Optional[Selection]) -> None:
         self.preview = sel
         self._render_preview()
 
+    def set_following(self, on: bool, source: str = "") -> None:
+        self.following = bool(on)
+        self._status("Following the reading %s%s" % ("resumed" if on else "paused \u2014 say \"continue\" to resume",
+                                                      " (voice)" if source else ""))
+
     def go_live(self) -> None:
         if self.preview is None:
             return
+        self._passage_start = (self.preview.book, self.preview.chapter, self.preview.start)
         self.live.selection = self.preview.copy()
         self.live.cover = None
         self._render_live()

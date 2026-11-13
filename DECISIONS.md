@@ -118,6 +118,21 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   verse 8" is a relative reference rather than a command: the UI tells the detector which book
   and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
   newest of that and the last detection.
+- **Navigation intents replace fixed phrases.** The v1.2 phrase list missed how preachers
+  actually talk ("can we go back", "go back two verses", "back to the previous one") and
+  misread "go back one more verse" as *next*. `commands.parse_intent` now combines an action,
+  a direction, a scripture unit and an optional count. It has four kinds: step, goto,
+  stop and resume. Every rule needs a scripture unit, "the next/previous one" plus a movement
+  word, or an utterance made up only of the command (up to 8 words, filler ignored). Stop and
+  resume phrases accept at most one trailing content word, so "let's continue to worship" and
+  "keep reading your bible every day" are ignored. `tests/test_intents.py` holds about 150
+  phrases that must work and about 85 that must not. Add real phrasings there.
+- **A book-less "chapter N verse M" means the same book** as on screen. It is parsed only at
+  the start of an utterance or after a lead word ("turn to chapter 4 verse 2", "in chapter 3
+  verse 16"). "<garbled book> chapter 3 verse 5" therefore cannot be pulled into the current
+  book. A chapter alone ("back to chapter 3") needs a movement verb and is handled as a goto
+  intent.
+- **"Back to where we started"** goes to the first verse of the passage last sent live.
 - **Merged digits for strict books (v1.2).** "Job 120" → Job 1:20 and "John 316" → 3:16 at the
   user's request, unless the next word is a quantity (days, years, people, times, naira…). The
   known remaining risk: "my job 365" at the very end of a sentence becomes Job 36:5.

@@ -175,10 +175,26 @@ In **Detected**, click an entry to preview it again, or double-click it to send 
   on with Next. The entry in Detected is marked *(relative)*.
 
 **Voice commands** (Settings → Detection, on by default). The preacher can move the slide by
-voice:
+voice, in their own words. Some examples BiVerse understands:
 
-| Say | What happens |
+| The preacher says | What happens |
 |---|---|
+| "next verse", "the next one", "one more verse", "Next.", "move forward" | next verse |
+| "go back", "can we go back?", "the verse before", "back to the previous one" | previous verse |
+| "go back two verses", "skip ahead three verses", "a couple of verses back" | moves that many verses |
+| "next chapter", "go back a chapter", "go back two chapters" | verse 1 of that chapter |
+| "go back to chapter three", "turn to chapter four verse two" | that chapter (and verse) of **the same book** |
+| "move to verse eight", "verse eight" | verse 8 of the chapter on screen |
+| "the beginning of the chapter", "back to verse one" | verse 1 of this chapter |
+| "back to where we started" | the first verse of the passage you sent live |
+| "stop there", "let's stop there" / "continue", "let's continue", "read on" | pause / resume following the reading |
+
+In **Auto** mode the projector changes straight away. In **Manual** mode the new verse goes to
+Preview for you to send live. Ordinary sentences do nothing: "next week we have a retreat",
+"go back to Egypt", "let's continue to worship" and "the chapter of your life" are ignored.
+The Status line shows what BiVerse heard and did.
+
+---|---|
 | "next verse", "the following verse", or just "Next." | next verse |
 | "go back", "previous verse", "go back a verse" | previous verse |
 | "next chapter", "move to the next chapter" | verse 1 of the next chapter |

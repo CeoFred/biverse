@@ -193,3 +193,16 @@ def test_old_position_expires():
     d = Detector()
     d.set_position(19, 23, now=0)
     assert d.feed_final("verse four", now=400) == []
+
+
+def test_book_less_chapter_and_verse_uses_book_on_screen():
+    d = Detector()
+    d.set_position(1, 10, now=0)  # Genesis 10 on screen
+    assert labels(d.feed_final("now turn to chapter four verse two", now=1)) == [(NEW, "Genesis 4:2")]
+    assert labels(d.feed_final("and in chapter three verse fifteen", now=2)) == [(NEW, "Genesis 3:15")]
+
+
+def test_book_less_chapter_rejected_after_unknown_word():
+    d = Detector()
+    d.set_position(1, 10, now=0)
+    assert d.feed_final("Ruke chapter 3 verse 5", now=1) == []

@@ -236,3 +236,63 @@ def test_move_to_verse_uses_live_chapter(op):
     (kind, det), = events
     op._on_detection(kind, det)
     assert op.live.selection.verse_label() == "Romans 9:8"
+
+
+# -- phase 1: intents -------------------------------------------------------------
+
+def _say(op, text, t, channel="main"):
+    from versecast.commands import parse_intent
+    intent = parse_intent(text)
+    assert intent is not None, text
+    op._on_command(intent, channel, t, text)
+
+
+def _auto(op):
+    op.mode_var.set("auto")
+    op._on_mode()
+
+
+def test_intent_steps_with_counts(op):
+    _auto(op)
+    _show(op, "gen 10:3-10")
+    _say(op, "go forward three verses", 1)
+    assert op.live.selection.verse_label() == "Genesis 10:6"
+    _say(op, "can we go back two verses", 5)
+    assert op.live.selection.verse_label() == "Genesis 10:4"
+    _say(op, "go back to where we started", 9)
+    assert op.live.selection.verse_label() == "Genesis 10:3"
+
+
+def test_intent_chapter_goto_same_book(op):
+    _auto(op)
+    _show(op, "gen 10:3")
+    _say(op, "go back to chapter three", 1)
+    assert op.live.selection.verse_label() == "Genesis 3:1"
+    _say(op, "turn to chapter four verse two", 5)
+    assert op.live.selection.verse_label() == "Genesis 4:2"
+    _say(op, "go to the beginning of the chapter", 9)
+    assert op.live.selection.verse_label() == "Genesis 4:1"
+
+
+def test_intent_impossible_target_is_ignored(op):
+    _auto(op)
+    _show(op, "jude 1:3")
+    _say(op, "go to chapter five", 1)
+    assert op.live.selection.verse_label() == "Jude 1:3"
+    assert "not possible" in op.status_var.get()
+
+
+def test_stop_and_continue_toggle_following(op):
+    _show(op, "gen 10:3-10")
+    _say(op, "let's stop there", 1)
+    assert op.following is False
+    _say(op, "let's continue", 5)
+    assert op.following is True
+
+
+def test_book_less_chapter_and_verse_detection(op):
+    _auto(op)
+    _show(op, "gen 10:3")
+    (kind, det), = op.detector.feed_final("now turn to chapter four verse two")
+    op._on_detection(kind, det)
+    assert op.live.selection.verse_label() == "Genesis 4:2"

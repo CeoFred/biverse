@@ -434,3 +434,19 @@ def test_fuzzy_references_have_low_confidence():
     assert ref.confidence < AUTO_MIN_CONFIDENCE
     (ref,) = parse("turn to habakkuk chapter 3 verse 5")
     assert ref.confidence >= AUTO_MIN_CONFIDENCE
+
+
+@pytest.mark.parametrize("text,label", [
+    ("turn to chapter four verse two", "chapter 4:2"),
+    ("chapter 4 verse 2", "chapter 4:2"),
+    ("go to chapter three verses one to five", "chapter 3:1-5"),
+    ("in chapter three verse sixteen Paul says", "chapter 3:16"),
+])
+def test_book_less_chapter_references(text, label):
+    (ref,) = parse(text)
+    assert ref.relative and ref.book is None and ref.label() == label
+
+
+@pytest.mark.parametrize("text", ["Ruke chapter 3 verse 5", "go back to chapter 3", "the chapter of your life"])
+def test_book_less_chapter_needs_verse_and_lead_word(text):
+    assert [r for r in parse(text) if r.chapter is not None and r.book is None] == []
