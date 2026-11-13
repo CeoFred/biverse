@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff==0.17.5
+      - name: Ruff (target py38)
+        run: ruff check .
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # setup-python only ships 3.8 for Ubuntu 22.04
+          - python: "3.8"
+            os: ubuntu-22.04
+            reqs: requirements-legacy.txt
+          - python: "3.12"
+            os: ubuntu-latest
+            reqs: requirements.txt
+    runs-on: ${{ matrix.os }}
+    name: test (py${{ matrix.python }})
+    env:
+      BIVERSE_REQUIRE_DB: "1"
+      BIVERSE_REQUIRE_VOSK: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: System packages (PortAudio, TTS for the recognition test, Xvfb for Tk)
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 espeak-ng xvfb
+      - name: Python packages
+        run: pip install -r ${{ matrix.reqs }}
+      - name: Byte-compile everything
+        run: python -m compileall -q versecast tools tests packaging/launcher.py
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+      - name: Build Bible database
+        run: python tools/build_bible_db.py
+      - name: Fetch speech model
+        run: python tools/fetch_model.py
+      - name: Tests
+        run: xvfb-run -a python -m pytest -q -rs
+      - name: Self-test from source
+        run: xvfb-run -a python -m versecast --self-test
+
+  screenshots:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libportaudio2 xvfb imagemagick fonts-dejavu
+      - run: pip install -r requirements.txt
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+      - run: python tools/build_bible_db.py && python tools/fetch_model.py
+      - name: Operator window at 1024x600 and 1920x1080, projector output at 1920x1080
+        run: |
+          xvfb-run -a -s "-screen 0 1024x600x24"  python tools/screenshots.py operator shots/operator-1024x600.png
+          xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py operator shots/operator-1920x1080.png
+          xvfb-run -a -s "-screen 0 1920x1080x24" python tools/screenshots.py output shots/output-1920x1080.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: shots/

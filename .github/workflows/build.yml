@@ -1,0 +1,216 @@
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packaging/**"
+      - "versecast/**"
+      - "tools/**"
+      - "requirements*.txt"
+      - ".github/workflows/build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-legacy-x64
+            os: windows-2022
+            python: "3.8.10"
+            arch: x64
+            reqs: requirements-legacy.txt
+          - name: windows-legacy-x86
+            os: windows-2022
+            python: "3.8.10"
+            arch: x86
+            reqs: requirements-legacy.txt
+          - name: windows-x64
+            os: windows-latest
+            python: "3.12"
+            arch: x64
+            reqs: requirements.txt
+          - name: macos-intel
+            # last Intel image GitHub offers; python.org 3.8.10 (macOS 10.9+ x86_64 build)
+            os: macos-15-intel
+            python: "3.8.10-pkg"
+            arch: x64
+            reqs: requirements-legacy.txt
+            macos_min: "10.13"
+          - name: macos-arm
+            os: macos-14
+            python: "3.12"
+            arch: arm64
+            reqs: requirements.txt
+            macos_min: "11.0"
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+    env:
+      NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------- Python
+      - name: Set up Python (setup-python)
+        id: setup
+        if: matrix.python != '3.8.10-pkg'
+        continue-on-error: true
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.arch }}
+
+      - name: Use setup-python interpreter
+        if: matrix.python != '3.8.10-pkg' && steps.setup.outcome == 'success'
+        run: echo "PY=${{ steps.setup.outputs.python-path }}" >> "$GITHUB_ENV"
+
+      - name: Fallback - python.org installer (Windows)
+        if: runner.os == 'Windows' && matrix.python != '3.8.10-pkg' && steps.setup.outcome != 'success'
+        shell: pwsh
+        run: |
+          $suffix = if ("${{ matrix.arch }}" -eq "x86") { "" } else { "-amd64" }
+          $url = "https://www.python.org/ftp/python/${{ matrix.python }}/python-${{ matrix.python }}$suffix.exe"
+          Invoke-WebRequest $url -OutFile py-installer.exe
+          $target = "C:\Python-${{ matrix.arch }}"
+          Start-Process py-installer.exe -Wait -ArgumentList "/quiet","InstallAllUsers=1","PrependPath=1","Include_test=0","TargetDir=$target"
+          "PY=$target\python.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: python.org 3.8.10 (macOS 10.9+ installer)
+        if: matrix.python == '3.8.10-pkg'
+        run: |
+          curl -fsSL -o python.pkg https://www.python.org/ftp/python/3.8.10/python-3.8.10-macosx10.9.pkg
+          sudo installer -pkg python.pkg -target /
+          echo "PY=/Library/Frameworks/Python.framework/Versions/3.8/bin/python3.8" >> "$GITHUB_ENV"
+
+      - name: Normalise interpreter path
+        run: |
+          if command -v cygpath >/dev/null; then echo "PY=$(cygpath -u "$PY")" >> "$GITHUB_ENV"; fi
+
+      - name: Python packages
+        run: |
+          "$PY" --version
+          "$PY" -c "import struct, tkinter; print(struct.calcsize('P') * 8, 'bit; Tk', tkinter.TkVersion)"
+          "$PY" -m pip install --upgrade "pip<25"
+          "$PY" -m pip install -r ${{ matrix.reqs }}
+
+      # ------------------------------------------------------------- data + model
+      - uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+      - name: Build Bible database
+        run: '"$PY" tools/build_bible_db.py'
+      - name: Fetch speech model
+        run: '"$PY" tools/fetch_model.py'
+      - name: Unit tests (non-GUI)
+        run: '"$PY" -m pytest -q -x tests/test_parser.py tests/test_detector.py tests/test_bible.py tests/test_components.py'
+
+      # ------------------------------------------------------------- package
+      - name: PyInstaller
+        env:
+          BIVERSE_MACOS_MIN: ${{ matrix.macos_min }}
+        run: '"$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/versecast.spec'
+
+      - name: Version
+        run: echo "VERSION=$("$PY" -c 'import versecast; print(versecast.__version__)')" >> "$GITHUB_ENV"
+
+      - name: Verify bundled native libraries
+        run: |
+          find dist -iname "libvosk*" -o -iname "*portaudio*" | tee libs.txt
+          grep -qi libvosk libs.txt
+          if [ "$RUNNER_OS" != "Linux" ]; then grep -qi portaudio libs.txt; fi
+
+      - name: macOS - sign ad hoc, record deployment targets
+        if: runner.os == 'macOS'
+        env:
+          BIVERSE_CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
+        run: |
+          if [ -n "$BIVERSE_CODESIGN_ID" ]; then
+            codesign --force --deep --options runtime -s "$BIVERSE_CODESIGN_ID" dist/BiVerse.app
+          else
+            codesign --force --deep -s - dist/BiVerse.app
+          fi
+          codesign --verify --deep --strict dist/BiVerse.app
+          # Risk check (spec §15): minimum macOS of every bundled Mach-O
+          find dist/BiVerse.app -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dyld" -o -perm +111 \) | while read f; do
+            if file "$f" | grep -q Mach-O; then
+              v=$(otool -l "$f" | awk '/LC_VERSION_MIN_MACOSX/{f=1} /LC_BUILD_VERSION/{f=1} f&&/version|minos/{print $2; f=0; exit}')
+              echo "$v  ${f#dist/}"
+            fi
+          done | sort -V | tee macho-min-versions.txt | tail -15
+
+      - name: macOS - optional notarisation
+        if: runner.os == 'macOS' && env.NOTARY_PROFILE != ''
+        run: |
+          ditto -c -k --keepParent dist/BiVerse.app notarize.zip
+          xcrun notarytool submit notarize.zip --keychain-profile "$NOTARY_PROFILE" --wait
+          xcrun stapler staple dist/BiVerse.app
+
+      - name: Smoke test (packaged build, --self-test)
+        if: runner.os == 'macOS'
+        run: |
+          export BIVERSE_CONFIG_DIR="$RUNNER_TEMP/biverse-cfg"
+          dist/BiVerse.app/Contents/MacOS/BiVerse --self-test --report self-test.json || { cat self-test.json; exit 1; }
+          cat self-test.json
+
+      - name: Smoke test (packaged build, --self-test)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BIVERSE_CONFIG_DIR = "$env:RUNNER_TEMP\biverse-cfg"
+          # BiVerse.exe is a windowed (GUI-subsystem) program: wait for it explicitly
+          $p = Start-Process -FilePath "dist\BiVerse\BiVerse.exe" -ArgumentList "--self-test","--report","self-test.json" -Wait -PassThru -NoNewWindow
+          Get-Content self-test.json
+          if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "BiVerse-$env:VERSION-${{ matrix.name }}.zip"
+          Copy-Item packaging\README.txt dist\README.txt
+          Compress-Archive -Path dist\BiVerse, dist\README.txt -DestinationPath $name
+          "ZIP=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Zip (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ZIP="BiVerse-$VERSION-${{ matrix.name }}.zip"
+          ditto -c -k --keepParent dist/BiVerse.app "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            ${{ env.ZIP }}
+            self-test.json
+            macho-min-versions.txt
+          if-no-files-found: warn
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Checksums
+        run: |
+          mkdir release
+          find artifacts -name "*.zip" -exec cp {} release/ \;
+          cd release && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --title "BiVerse ${GITHUB_REF_NAME}" --generate-notes

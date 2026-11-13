@@ -1,0 +1,14 @@
+# Python 3.8.10 builds (windows-legacy x64/x86, macos-intel-legacy).
+# vosk 0.3.44 exactly: 0.3.45 has no macOS wheel.
+vosk==0.3.44
+sounddevice==0.5.6
+# vosk's own dependencies, pinned to versions that still support Python 3.8
+cffi==1.17.1
+requests==2.32.4
+urllib3==2.2.3
+srt==3.5.3
+tqdm==4.67.1
+# build and test
+pyinstaller==5.13.2
+pyinstaller-hooks-contrib==2023.10
+pytest==8.3.5
