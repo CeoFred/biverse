@@ -41,7 +41,9 @@ class OperatorWindow(object):
         self.bible = bible
         self.events = queue.Queue()  # type: queue.Queue
         self.renderer = Renderer(root)
-        self.builder = SlideBuilder(bible)
+        from .emphasis import EmphasisStore
+        self.emphasis = EmphasisStore()
+        self.builder = SlideBuilder(bible, self.emphasis)
         self.preview = None  # type: Optional[Selection]
         self.live = LiveState()
         self.devices = []  # type: List[audio.InputDevice]
@@ -233,6 +235,8 @@ class OperatorWindow(object):
         self.live_label = ttk.Label(thumbs, text="—")
         self.preview_label.grid(row=2, column=0, sticky="w")
         self.live_label.grid(row=2, column=1, sticky="w", padx=(6, 0))
+        ttk.Button(thumbs, text=u"\u270e Emphasis", width=10, command=self.open_emphasis).grid(
+            row=2, column=1, sticky="e")
         thumbs.bind("<Configure>", lambda e: self._resize_thumbs(e.width))
         self.preview_canvas.bind("<Double-1>", lambda e: self.go_live())
 
@@ -288,6 +292,7 @@ class OperatorWindow(object):
     def _bind_keys(self) -> None:
         r = self.root
         r.bind_all("<F6>", lambda e: self._key(self.toggle_following))
+        r.bind_all("<%s-e>" % MOD, lambda e: self._key(self.open_emphasis))
         for seq in ("<%s-Return>" % MOD, "<%s-KP_Enter>" % MOD, "<F5>"):
             r.bind_all(seq, lambda e: self._key(self.go_live))
         r.bind_all("<Escape>", lambda e: self._key(self.blank))
@@ -1010,6 +1015,15 @@ class OperatorWindow(object):
         if fill > 0:
             color = "#2fbf3a" if level < 75 else ("#e0c020" if level < 92 else "#e03030")
             c.create_rectangle(0, 0, fill, h, fill=color, width=0, tags="bar")
+
+    def open_emphasis(self) -> None:
+        """Bold / underline / highlight words of the live verse (or the preview)."""
+        from .ui_emphasis import EmphasisDialog
+        sel = self.live.selection or self.preview
+        if sel is None:
+            self._status("Nothing to emphasise yet: show a verse first", error=True)
+            return
+        EmphasisDialog(self, sel.book, sel.chapter, sel.cur, self.translation())
 
     def open_settings(self) -> None:
         from .ui_settings import SettingsDialog

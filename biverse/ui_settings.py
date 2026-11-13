@@ -27,6 +27,7 @@ class SettingsDialog(object):
         nb.add(ap, text="Appearance")
         self.bg = tk.StringVar(value=a.background)
         self.fg = tk.StringVar(value=a.foreground)
+        self.hl = tk.StringVar(value=a.highlight_color)
         self.family = tk.StringVar(value=a.font_family or op.renderer.family(a))
         self.bold = tk.BooleanVar(value=a.bold)
         self.shadow = tk.BooleanVar(value=a.shadow)
@@ -45,6 +46,12 @@ class SettingsDialog(object):
         self.fg_swatch = tk.Label(ap, width=4, background=self.fg.get(), relief="solid", borderwidth=1)
         self.fg_swatch.grid(row=row, column=1, sticky="w")
         ttk.Button(ap, text="Choose…", command=lambda: self._color(self.fg, self.fg_swatch)).grid(
+            row=row, column=2, sticky="w")
+        row += 1
+        ttk.Label(ap, text="Highlight colour").grid(row=row, column=0, sticky="w", pady=2)
+        self.hl_swatch = tk.Label(ap, width=4, background=self.hl.get(), relief="solid", borderwidth=1)
+        self.hl_swatch.grid(row=row, column=1, sticky="w")
+        ttk.Button(ap, text="Choose\u2026", command=lambda: self._color(self.hl, self.hl_swatch)).grid(
             row=row, column=2, sticky="w")
         row += 1
         ttk.Label(ap, text="Font").grid(row=row, column=0, sticky="w", pady=2)
@@ -189,6 +196,7 @@ class SettingsDialog(object):
         a = s.appearance
         a.background = self.bg.get()
         a.foreground = self.fg.get()
+        a.highlight_color = self.hl.get()
         a.font_family = self.family.get()
         a.bold = bool(self.bold.get())
         a.shadow = bool(self.shadow.get())

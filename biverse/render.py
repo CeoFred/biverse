@@ -32,10 +32,11 @@ EMPTY = "empty"   # nothing loaded yet (black)
 
 class Appearance(object):
     __slots__ = ("background", "foreground", "font_family", "bold", "shadow", "reference_position",
-                 "background_image", "reference_color")
+                 "background_image", "reference_color", "highlight_color")
 
     def __init__(self, background="#000000", foreground="#FFFFFF", font_family="", bold=True, shadow=True,
-                 reference_position="bottom", background_image="", reference_color=""):
+                 reference_position="bottom", background_image="", reference_color="", highlight_color="#FFD54A"):
+        self.highlight_color = highlight_color
         self.background = background
         self.foreground = foreground
         self.font_family = font_family
@@ -65,17 +66,21 @@ class Appearance(object):
 class Slide(object):
     """What to show: verse text plus its reference line, or a blank/black screen."""
 
-    __slots__ = ("kind", "text", "reference", "verses")
+    __slots__ = ("kind", "text", "reference", "verses", "marks")
 
-    def __init__(self, kind: str = EMPTY, text: str = "", reference: str = "", verses=None) -> None:
+    def __init__(self, kind: str = EMPTY, text: str = "", reference: str = "", verses=None, marks=None) -> None:
         self.kind = kind
         self.text = text
         self.reference = reference
         self.verses = verses or []
+        self.marks = marks or {}  # word index -> {"bold", "underline", "highlight"}
 
     def __eq__(self, other):
-        return isinstance(other, Slide) and (self.kind, self.text, self.reference) == (
-            other.kind, other.text, other.reference)
+        return isinstance(other, Slide) and (self.kind, self.text, self.reference, self._mkey()) == (
+            other.kind, other.text, other.reference, other._mkey())
+
+    def _mkey(self):
+        return tuple(sorted((i, tuple(sorted(s))) for i, s in self.marks.items()))
 
     def __repr__(self):  # pragma: no cover
         return "Slide(%s, %r)" % (self.kind, self.reference)
@@ -115,6 +120,7 @@ class Renderer(object):
         self._image_cache = {}  # type: Dict[tuple, object]
         self._measure = None
         self._family = None  # type: Optional[str]
+        self._fonts = {}  # Tk font objects for word-by-word drawing
 
     # -- measuring ----------------------------------------------------------
     def _canvas(self):
@@ -193,6 +199,39 @@ class Renderer(object):
         lay.text_y = (box[1] + box[3]) // 2
         return lay
 
+    def _draw_marked(self, canvas, slide, appearance, px, box_w, cx, cy):
+        """Word-by-word drawing for verses with bold / underline / highlight marks."""
+        family = self.family(appearance)
+        words = slide.text.split()
+        fonts = []
+        for i in range(len(words)):
+            st = slide.marks.get(i, ())
+            fonts.append(_tk_font(self.root, self._fonts, family, px, appearance.bold or "bold" in st,
+                                  "underline" in st))
+        base = _tk_font(self.root, self._fonts, family, px, appearance.bold, False)
+        space = base.measure(" ")
+        widths = [fonts[i].measure(w) for i, w in enumerate(words)]
+        lines = layout_words(words, widths, space, box_w)
+        lh = base.metrics("linespace")
+        y = cy - lh * len(lines) / 2.0
+        off = max(1, px // 18)
+        pad = max(1, px // 10)
+        for line in lines:
+            line_w = sum(widths[i] for i in line) + space * (len(line) - 1)
+            x = cx - line_w / 2.0
+            for i in line:
+                st = slide.marks.get(i, ())
+                fill = appearance.foreground
+                if "highlight" in st:
+                    canvas.create_rectangle(x - pad, y + pad // 2, x + widths[i] + pad, y + lh - pad // 2,
+                                            fill=appearance.highlight_color, outline="")
+                    fill = "#111111"
+                elif appearance.shadow:
+                    canvas.create_text(x + off, y + off, text=words[i], font=fonts[i], anchor="nw", fill="#000000")
+                canvas.create_text(x, y, text=words[i], font=fonts[i], anchor="nw", fill=fill)
+                x += widths[i] + space
+            y += lh
+
     # -- drawing ------------------------------------------------------------
     def _background_image(self, path: str, width: int, height: int):
         if not path or not os.path.isfile(path):
@@ -257,12 +296,15 @@ class Renderer(object):
         box_w = s(lay.box[2] - lay.box[0])
         cx = width // 2
         font = self.font(appearance, text_size)
-        if appearance.shadow:
-            off = max(1, text_size // 18)
-            canvas.create_text(cx + off, s(lay.text_y) + off, text=slide.text, font=font, width=box_w,
-                               justify="center", anchor="center", fill="#000000")
-        canvas.create_text(cx, s(lay.text_y), text=slide.text, font=font, width=box_w, justify="center",
-                           anchor="center", fill=appearance.foreground)
+        if slide.marks:
+            self._draw_marked(canvas, slide, appearance, text_size, box_w, cx, s(lay.text_y))
+        else:
+            if appearance.shadow:
+                off = max(1, text_size // 18)
+                canvas.create_text(cx + off, s(lay.text_y) + off, text=slide.text, font=font, width=box_w,
+                                   justify="center", anchor="center", fill="#000000")
+            canvas.create_text(cx, s(lay.text_y), text=slide.text, font=font, width=box_w, justify="center",
+                               anchor="center", fill=appearance.foreground)
         label = slide.reference
         if translation and label:
             label = u"%s · %s" % (label, translation)
@@ -274,6 +316,37 @@ class Renderer(object):
                 canvas.create_text(cx + off, s(lay.ref_y) + off, text=label, font=ref_font, anchor="center",
                                    fill="#000000")
             canvas.create_text(cx, s(lay.ref_y), text=label, font=ref_font, anchor="center", fill=color)
+
+
+def _tk_font(root, cache, family, px, bold, underline):
+    key = (family, px, bold, underline)
+    f = cache.get(key)
+    if f is None:
+        import tkinter.font as tkfont
+        f = tkfont.Font(root=root, family=family, size=-max(1, px), weight="bold" if bold else "normal",
+                        underline=1 if underline else 0)
+        if len(cache) > 200:
+            cache.clear()
+        cache[key] = f
+    return f
+
+
+def layout_words(words, widths, space, box_w):
+    """Greedy word wrap (the same rule Tk uses): [[word index, ...], ...] per line."""
+    lines, cur, width = [], [], 0
+    for i, w in enumerate(widths):
+        need = w if not cur else width + space + w
+        if cur and need > box_w:
+            lines.append(cur)
+            cur, width = [i], w
+        else:
+            cur.append(i)
+            width = need
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 
 
 def _hex(c: str) -> Tuple[int, int, int]:

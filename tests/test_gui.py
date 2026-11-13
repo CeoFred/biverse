@@ -366,3 +366,41 @@ def test_voice_switches_translation_until_changed(op, bible):
     intent = parse_intent("show it in the NIV", op.engine.translations)
     op._on_command(intent, "main", 5.0, "show it in the NIV")
     assert op.translation() == "YLT" and "not installed" in op.status_var.get()
+
+
+# -- emphasis ----------------------------------------------------------------------
+
+def test_emphasis_marks_live_verse(op, tmp_path):
+    from biverse.emphasis import EmphasisStore
+    from biverse.ui_emphasis import EmphasisDialog
+    op.emphasis = EmphasisStore(str(tmp_path / "emph.json"))
+    op.builder.emphasis = op.emphasis
+    _show(op, "john 3:16")
+    dlg = EmphasisDialog(op, 43, 3, 16, "KJV")
+    op.root.update()
+    dlg.select_words([2, 3])  # "so loved"
+    assert dlg.selected_words() == [2, 3]
+    dlg.apply("highlight")
+    assert op.output.slide.marks == {2: {"highlight"}, 3: {"highlight"}}
+    dlg.apply("highlight")  # toggles off
+    assert op.output.slide.marks == {}
+    dlg.select_words([5])
+    dlg.apply("underline")
+    dlg.apply("bold")
+    assert op.output.slide.marks == {5: {"bold", "underline"}}
+    # saved per translation + verse
+    assert EmphasisStore(str(tmp_path / "emph.json")).get("KJV", 43, 3, 16) == {5: {"bold", "underline"}}
+    assert op.emphasis.get("ASV", 43, 3, 16) == {}
+    dlg.clear_all()
+    assert op.output.slide.marks == {}
+    dlg.win.destroy()
+
+
+def test_marked_slide_draws_word_items(op):
+    from biverse.render import TEXT, Slide
+    c = tk.Canvas(op.root, width=640, height=360)
+    slide = Slide(TEXT, "For God so loved the world", "John 3:16", marks={2: {"highlight"}, 3: {"bold"}})
+    op.renderer.draw(c, slide, op.settings.appearance, 640, 360, translation="KJV")
+    kinds = [c.type(i) for i in c.find_all()]
+    assert kinds.count("rectangle") == 1  # one highlight box
+    assert sum(1 for i in c.find_all() if c.type(i) == "text") >= 6  # word by word

@@ -54,6 +54,11 @@ def main(kind: str, out: str) -> int:
         op.search_var.set("john 3:16")
         op.search()
         op.go_live()
+        # show emphasis on the projector: highlight "so loved", underline "everlasting life"
+        sel = op.live.selection
+        op.emphasis.toggle("KJV", sel.book, sel.chapter, sel.cur, [2, 3], "highlight")
+        op.emphasis.toggle("KJV", sel.book, sel.chapter, sel.cur, [23, 24], "underline")
+        op._render_all()
         op.search_var.set("love is patient")
         op.search()
         op._handle(("partial", "for god so loved the world that he"))

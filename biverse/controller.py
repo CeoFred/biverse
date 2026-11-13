@@ -110,8 +110,9 @@ def chapter_step(bible: Bible, sel: Selection, delta: int) -> Optional[Selection
 class SlideBuilder(object):
     """Turns selections into slides in the current translation."""
 
-    def __init__(self, bible: Bible) -> None:
+    def __init__(self, bible: Bible, emphasis=None) -> None:
         self.bible = bible
+        self.emphasis = emphasis  # EmphasisStore or None
 
     def slide(self, sel: Optional[Selection], translation: str, fit_range: bool = False,
               fits=None) -> Slide:
@@ -128,7 +129,9 @@ class SlideBuilder(object):
         if not text:
             text = u"(%s %d:%d is not included in the %s.)" % (
                 books.get(sel.book).ref_name, sel.chapter, sel.cur, translation)
-        return Slide(TEXT, text, sel.verse_label())
+            return Slide(TEXT, text, sel.verse_label())
+        marks = self.emphasis.get(translation, sel.book, sel.chapter, sel.cur) if self.emphasis else {}
+        return Slide(TEXT, text, sel.verse_label(), marks=marks)
 
 
 class LiveState(object):

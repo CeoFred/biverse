@@ -196,3 +196,29 @@ def test_old_settings_folder_is_carried_over(tmp_path):
     new = tmp_path / "Biverse"
     paths._migrate_old_name(str(new))
     assert (new / "settings.json").exists() or (old / "settings.json").exists()  # case-insensitive disks: same dir
+
+
+def test_emphasis_store_roundtrip(tmp_path):
+    from biverse.emphasis import EmphasisStore
+    p = str(tmp_path / "e.json")
+    s = EmphasisStore(p)
+    assert s.toggle("kjv", 43, 3, 16, [1, 2], "bold") == {1: {"bold"}, 2: {"bold"}}
+    s.toggle("KJV", 43, 3, 16, [2], "highlight")
+    assert EmphasisStore(p).get("KJV", 43, 3, 16) == {1: {"bold"}, 2: {"bold", "highlight"}}
+    s.clear("KJV", 43, 3, 16, [1])
+    assert s.get("KJV", 43, 3, 16) == {2: {"bold", "highlight"}}
+    s.clear("KJV", 43, 3, 16)
+    assert EmphasisStore(p).get("KJV", 43, 3, 16) == {}
+
+
+def test_emphasis_store_ignores_corrupt_file(tmp_path):
+    from biverse.emphasis import EmphasisStore
+    p = tmp_path / "e.json"
+    p.write_text("{broken")
+    assert EmphasisStore(str(p)).get("KJV", 1, 1, 1) == {}
+
+
+def test_layout_words_wraps_like_tk():
+    from biverse.render import layout_words
+    assert layout_words(["a"] * 5, [10] * 5, 5, 40) == [[0, 1, 2], [3, 4]]
+    assert layout_words(["long"], [100], 5, 40) == [[0]]
