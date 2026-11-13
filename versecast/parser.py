@@ -24,6 +24,11 @@ SEPARATORS = frozenset(["colon", ":"])
 # "john chapter three were sixteen". Only accepted inside a reference.
 VERSE_MISHEARD = frozenset(["were", "versus", "vers", "worse"])
 FILLER = frozenset(["of"])
+# Number homophones the recogniser writes instead of digits ("genesis to
+# eighteen" for "genesis two eighteen"). Only accepted as the *chapter*
+# directly after a book name and only when a number follows, so "romans 8, for
+# we know" and ranges ("16 to 18") are unaffected.
+CHAPTER_HOMOPHONES = {"to": 2, "too": 2, "for": 4, "fore": 4, "ate": 8, "won": 1}
 RANGE_WORDS = frozenset(["to", "through", "thru", "till", "til", "until"])
 
 VerseCounter = Callable[[int, int], int]
@@ -122,6 +127,14 @@ class _Tail(object):
         self.verse_kw = False
 
 
+def _number_follows(tokens, k):
+    """A number at ``k``, optionally after a verse word ("to verse 18")."""
+    n = len(tokens)
+    while k < n and (tokens[k] in VERSE_WORDS or tokens[k] in SEPARATORS or tokens[k] in VERSE_MISHEARD):
+        k += 1
+    return k < n and _is_num(tokens[k])
+
+
 def _parse_tail(tokens, j):
     """Parse ``[chapter] C [verse|:|colon] [V [to V2]]`` starting at ``j``."""
     n = len(tokens)
@@ -130,9 +143,12 @@ def _parse_tail(tokens, j):
         if tokens[j] in CHAPTER_WORDS:
             tail.chapter_kw = True
         j += 1
-    if j >= n or not _is_num(tokens[j]):
+    if j < n and tokens[j] in CHAPTER_HOMOPHONES and _number_follows(tokens, j + 1):
+        tail.chapter = CHAPTER_HOMOPHONES[tokens[j]]
+    elif j >= n or not _is_num(tokens[j]):
         return None
-    tail.chapter = int(tokens[j])
+    else:
+        tail.chapter = int(tokens[j])
     j += 1
     tail.end = j
 

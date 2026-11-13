@@ -69,6 +69,27 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   for John (strict, so it needs a chapter and a verse). "were", "versus", "vers" and "worse"
   count as "verse" only *between* a chapter number and a verse number. "we were sixteen
   people" still does not match. More entries should be collected from real sermons.
+- **Reference-only second recogniser (v1.1).** Real use showed the small model turning
+  "genesis two eighteen" into "genesis to a team". A second Vosk recogniser with a grammar of
+  book names, number words and reference keywords now runs on the same audio. On 84
+  synthetic clips (7 voices × 6 sentences, clean and with noise) the first reference was found
+  15 times by the general recogniser alone and 46 times with the grammar recogniser. Because
+  that recogniser forces any speech into book names and numbers, its output is trusted
+  only for complete chapter-and-verse references. It gets no context carry-over across
+  pauses, which in testing joined "mathew thirteen" and "fourteen" from separate utterances.
+  It runs only for models with a dynamic graph (small and lgraph models). It can be turned off
+  in Settings, since it roughly doubles recognition CPU.
+- **Number homophones as the chapter.** "to/too" = 2, "for/fore" = 4, "ate" = 8 and "won" = 1
+  are read as numbers only in the chapter position directly after a book name, and only if
+  a number follows ("genesis to eighteen" → 2:18). "Romans 8, for we know" and "16 to 18"
+  are unaffected.
+- **Book names missing from the small model.** Its vocabulary has no "philippians",
+  "thessalonians", "zechariah", "haggai" and others. What it produces instead was collected
+  by synthesising "turn to <book> chapter four" in six voices. Consistent, rare outputs became
+  spoken names ("zakaria", "malika", "galicians", "philadelphians", "ecclesiasties"). Outputs
+  that are ordinary words ("look", "sam", "collections", "relations", "evasions") count only
+  with chapter and verse (`MISHEARD_STRICT` in books.py). Thessalonians, Haggai, Habakkuk,
+  Deuteronomy and Zephaniah came out as inconsistent noise and need a bigger model.
 - **Chapter-only after a verse.** Mentioning "John chapter 3" within 60 s of John 3:16 is
   treated as a repeat and ignored. Hearing "John 3" and then "verse 16" updates the
   detection to John 3:16, the same way range extension works.

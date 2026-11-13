@@ -91,7 +91,8 @@ BOOKS = [
     Book(19, "PSA", "Psalms", ("psalm", "psalms", "salm", "salms", "the psalms", "palms", "psalter"),
          ("ps", "psa", "pss", "psm", "pslm"), ref_name="Psalm"),
     Book(20, "PRO", "Proverbs", ("proverbs", "proverb"), ("prov", "pro", "prv", "pr")),
-    Book(21, "ECC", "Ecclesiastes", ("ecclesiastes", "ecclesiastics", "ecclesiastic", "ecclesiastes's"),
+    Book(21, "ECC", "Ecclesiastes",
+         ("ecclesiastes", "ecclesiastics", "ecclesiastic", "ecclesiastes's", "ecclesiasties"),
          ("eccl", "ecc", "eccles", "ec", "qoh")),
     Book(22, "SNG", "Song of Solomon",
          ("song of solomon", "song of songs", "songs of solomon", "songs of songs",
@@ -112,8 +113,8 @@ BOOKS = [
     Book(35, "HAB", "Habakkuk", ("habakkuk", "habakuk", "habbakuk", "habakkuk's", "habacuc"), ("hab", "hb")),
     Book(36, "ZEP", "Zephaniah", ("zephaniah", "zephania"), ("zeph", "zep", "zp")),
     Book(37, "HAG", "Haggai", ("haggai", "hagai"), ("hag", "hg")),
-    Book(38, "ZEC", "Zechariah", ("zechariah", "zachariah", "zacharias", "zecharia"), ("zech", "zec", "zc")),
-    Book(39, "MAL", "Malachi", ("malachi", "malachai"), ("mal", "ml")),
+    Book(38, "ZEC", "Zechariah", ("zechariah", "zachariah", "zacharias", "zecharia", "zakaria"), ("zech", "zec", "zc")),
+    Book(39, "MAL", "Malachi", ("malachi", "malachai", "malika"), ("mal", "ml")),
     Book(40, "MAT", "Matthew", ("matthew", "matthews", "mathew"), ("matt", "mat", "mt")),
     Book(41, "MRK", "Mark", ("mark",), ("mrk", "mk", "mr", "mar"), strict=True),
     Book(42, "LUK", "Luke", ("luke",), ("luk", "lk", "lu")),
@@ -123,11 +124,11 @@ BOOKS = [
     Book(45, "ROM", "Romans", ("romans", "roman"), ("rom", "ro", "rm")),
     _nb(46, "1CO", "1 Corinthians", 1, "corinthians"),
     _nb(47, "2CO", "2 Corinthians", 2, "corinthians"),
-    Book(48, "GAL", "Galatians", ("galatians", "galatian"), ("gal", "ga")),
+    Book(48, "GAL", "Galatians", ("galatians", "galatian", "galicians"), ("gal", "ga")),
     Book(49, "EPH", "Ephesians", ("ephesians", "ephesian"), ("eph", "ephes")),
     Book(50, "PHP", "Philippians",
          ("philippians", "philippines", "filipinos", "filipino", "philippine", "phillipians", "filipians",
-          "philippians's"),
+          "philippians's", "philadelphians"),
          ("phil", "php", "pp", "phi")),
     Book(51, "COL", "Colossians", ("colossians", "colossian", "collosians"), ("col",)),
     _nb(52, "1TH", "1 Thessalonians", 1, "thessalonians"),
@@ -156,9 +157,24 @@ def _key(name):
     return tuple(name.replace("'", "").split())
 
 
+# Mis-hearings by the small Vosk model that are also ordinary words. They count
+# only like strict names: followed by chapter AND verse, or by "chapter".
+# Collected by synthesising "turn to <book> chapter four" in several voices.
+MISHEARD_STRICT = {
+    19: ("sam",),                         # psalm
+    42: ("look",),                        # luke
+    48: ("relations",),                   # galatians
+    49: ("evasions",),                    # ephesians
+    51: ("collections", "collisions"),    # colossians
+}
+
+
 def _build_index(include_typed):
     """Map token tuples to (book, is_strict_name)."""
     index = {}
+    for number, names in MISHEARD_STRICT.items():
+        for name in names:
+            index[_key(name)] = (BY_NUMBER[number], True)
     for book in BOOKS:
         names = list(book.spoken)
         # Display names are always valid ("1 samuel", "song of solomon").

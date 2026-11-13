@@ -231,6 +231,10 @@ Open **⚙ Settings**.
 - **Speech:** which speech model to use (see below).
 - **Detection:** strict book names, relative verses, how long to ignore repeats (60 seconds
   by default), and the Auto-mode safety option.
+- **Extra reference listener** (Detection tab, on by default): a second listener that only knows
+  book names and numbers. It catches references the main one mishears, such as "genesis two
+  eighteen" heard as "genesis to a team". It only adds references with both a chapter and a
+  verse. It roughly doubles the CPU used for listening, so turn it off on a very slow computer.
 - **Test output** shows a sample verse on the projector.
 
 BiVerse remembers everything (devices, display, translation, mode and appearance) for next
@@ -240,9 +244,15 @@ time.
 
 ## 9. Installing a bigger speech model
 
-BiVerse comes with a small English model (about 40 MB) that runs on old laptops. A bigger
-model recognises speech more accurately, especially with accents or a noisy feed, but it
-needs more memory and a faster computer.
+BiVerse comes with a small English model (about 40 MB) that runs on old laptops. **If your
+computer has 4 GB of RAM or more, install a bigger model: it is the single biggest
+improvement to detection.** It recognises speech much more accurately, especially with
+accents or a room microphone, but needs more memory and a faster computer.
+
+The small model does not know some book names at all, so it cannot detect these books when
+they are spoken: **Thessalonians, Haggai, Habakkuk, Deuteronomy, Zephaniah** and often
+**Philemon**. Philippians, Zechariah, Malachi, Galatians, Colossians and Ephesians usually work
+through common mis-hearings. Search still finds every book.
 
 1. On any computer with internet, go to **alphacephei.com/vosk/models** and download an
    English model, for example **vosk-model-en-us-0.22-lgraph** (about 130 MB, needs about
@@ -296,8 +306,12 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
   Check the permission above, or pick another input.
 
 **Speech is heard, but references are missed.**
-- Use a cleaner feed (from the desk rather than a microphone in the room).
-- Try a bigger speech model (section 9).
+- Look at the Transcript. If "genesis two eighteen" appears as "genesis to a team", the
+  speech model is mishearing; the words are not reaching BiVerse cleanly.
+- Use a cleaner feed (from the desk rather than a microphone in the room). A laptop microphone
+  picking up a loudspeaker is the hardest case.
+- Install a bigger speech model (section 9).
+- Make sure Settings → Detection → **Extra reference listener** is on.
 - Check that **strict book names** are not the cause: "John three" alone is not enough, but
   "John chapter three" is.
 

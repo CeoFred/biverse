@@ -127,3 +127,39 @@ def test_strict_option_passes_through():
 
 def test_empty_text():
     assert Detector().feed_final("", now=0) == []
+
+
+# -- reference-only recogniser channel ------------------------------------------------
+
+def test_reference_channel_accepts_chapter_and_verse():
+    from versecast.detector import REFERENCE
+    d = Detector()
+    events = d.feed_final("[unk] genesys two eighteen [unk]", now=0, channel=REFERENCE)
+    assert labels(events) == [(NEW, "Genesis 2:18")]
+
+
+def test_reference_channel_rejects_chapter_only_and_relative():
+    from versecast.detector import REFERENCE
+    d = Detector()
+    assert d.feed_final("[unk] micah three", now=0, channel=REFERENCE) == []
+    assert d.feed_final("[unk] mathew thirteen [unk]", now=1, channel=REFERENCE) == []
+    d.feed_final("john three sixteen", now=2)
+    assert d.feed_final("fourteen verses three", now=3, channel=REFERENCE) == []
+
+
+def test_both_channels_dedupe_and_extend():
+    from versecast.detector import REFERENCE
+    d = Detector()
+    assert labels(d.feed_final("genesis to a team", now=0)) == []
+    assert labels(d.feed_final("genesys two eighteen", now=0.1, channel=REFERENCE)) == [(NEW, "Genesis 2:18")]
+    assert d.feed_final("genesis two eighteen", now=0.2) == []  # same reference from the other channel
+    events = d.feed_final("genesys two eighteen to twenty", now=5, channel=REFERENCE)
+    assert labels(events) == [(UPDATE, "Genesis 2:18-20")]
+
+
+def test_channels_keep_separate_context():
+    from versecast.detector import REFERENCE
+    d = Detector()
+    d.feed_final("our text is romans chapter", now=0)
+    d.feed_final("[unk] [unk]", now=0.1, channel=REFERENCE)
+    assert labels(d.feed_final("eight verse twenty eight", now=1)) == [(NEW, "Romans 8:28")]

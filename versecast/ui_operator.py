@@ -60,6 +60,7 @@ class OperatorWindow(object):
                                  dedupe_window=float(settings["dedupe_window"]),
                                  verse_count=bible.verse_count)
         self.engine = SpeechEngine(self.events, self.detector)
+        self.engine.use_reference = settings["reference_recognizer"]
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
@@ -821,6 +822,7 @@ class OperatorWindow(object):
         self.detector.strict = s["strict_books"]
         self.detector.relative = s["relative_verses"]
         self.detector.dedupe_window = float(s["dedupe_window"])
+        self.engine.use_reference = s["reference_recognizer"]
         self.output.set_appearance(s.appearance)
         self._render_all()
         s.save()

@@ -155,6 +155,25 @@ def test_sixty_six_books():
     ("please turn in your bible to jog chapter three were sixteen", ["John 3:16"]),
     ("romans eight versus twenty eight", ["Romans 8:28"]),
     ("we were sixteen people", []),
+    # number homophones in the chapter position
+    ("that genesis to eighteen is not marriage", ["Genesis 2:18"]),
+    ("genesis too verse eighteen", ["Genesis 2:18"]),
+    ("philippians for thirteen says i can do all things", ["Philippians 4:13"]),
+    ("romans eight for we know", ["Romans 8"]),          # "for" after a chapter is not a verse
+    ("john three sixteen to eighteen", ["John 3:16-18"]),  # ranges unaffected
+    ("turn to genesis to read", []),
+    # small-model mis-hearings of book names it does not know
+    ("turn to zakaria four six", ["Zechariah 4:6"]),
+    ("malika three ten", ["Malachi 3:10"]),
+    ("philadelphians four thirteen", ["Philippians 4:13"]),
+    ("galicians two twenty", ["Galatians 2:20"]),
+    ("collections three twenty three", ["Colossians 3:23"]),
+    ("look two ten", ["Luke 2:10"]),
+    ("sam twenty three one", ["Psalm 23:1"]),
+    # ...which are ordinary words, so they need chapter and verse
+    ("look two people came", []),
+    ("our collections three times a year", []),
+    ("sam twenty three", []),
     ("john three sixteen to ninety", ["John 3:16-36"]),  # range end clamped
     ("john three eighteen to sixteen", ["John 3:18"]),  # backwards range ignored
 ])

@@ -101,6 +101,7 @@ class SettingsDialog(object):
         self.relative = tk.BooleanVar(value=s["relative_verses"])
         self.dedupe = tk.IntVar(value=int(s["dedupe_window"]))
         self.auto_verse = tk.BooleanVar(value=s["auto_requires_verse"])
+        self.ref_rec = tk.BooleanVar(value=s["reference_recognizer"])
         ttk.Checkbutton(dt, text="Strict book names (Mark, John, Job, Acts… need chapter and verse)",
                         variable=self.strict).grid(row=0, column=0, columnspan=2, sticky="w", pady=2)
         ttk.Checkbutton(dt, text="Relative verses (\"verse 17\" uses the last book and chapter)",
@@ -110,6 +111,11 @@ class SettingsDialog(object):
             row=2, column=1, sticky="w")
         ttk.Checkbutton(dt, text="Auto mode: only send references with chapter AND verse live",
                         variable=self.auto_verse).grid(row=3, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Checkbutton(dt, text="Extra reference listener (catches more references; uses about twice the CPU)",
+                        variable=self.ref_rec).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        ttk.Label(dt, text="Turn off on very slow computers. It only adds references that include both a "
+                           "chapter and a verse.", foreground="#666666", wraplength=420).grid(
+            row=5, column=0, columnspan=2, sticky="w")
 
         btns = ttk.Frame(self.win, padding=(8, 0, 8, 8))
         btns.pack(fill="x")
@@ -159,6 +165,7 @@ class SettingsDialog(object):
         except (tk.TclError, ValueError):
             pass
         s["auto_requires_verse"] = bool(self.auto_verse.get())
+        s["reference_recognizer"] = bool(self.ref_rec.get())
         model_changed = self.model_path.get().strip() != s["model_path"]
         s["model_path"] = self.model_path.get().strip()
         self.op.apply_settings()

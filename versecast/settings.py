@@ -39,6 +39,7 @@ DEFAULTS = {
     "relative_verses": True,
     "dedupe_window": 60,
     "auto_requires_verse": True,    # auto mode only sends chapter AND verse live
+    "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
 }  # type: Dict[str, Any]
 
 

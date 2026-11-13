@@ -39,6 +39,10 @@ class Detection(object):
 NEW = "new"
 UPDATE = "update"
 
+# recogniser channels
+FREE = "free"
+REFERENCE = "reference"
+
 
 class Detector(object):
     def __init__(self, strict=True, relative=True, dedupe_window=60.0, extend_window=30.0,
@@ -51,35 +55,47 @@ class Detector(object):
         self.verse_count = verse_count
         self.clock = clock
         self.detections = []
-        self._prev_words = []
+        self._prev_words = {}
         self._ids = itertools.count(1)
 
     def reset(self):
         self.detections = []
-        self._prev_words = []
+        self._prev_words = {}
 
     def _last_absolute(self, now):
         if self.detections and now - self.detections[-1].time <= self.relative_window:
             return self.detections[-1]
         return None
 
-    def feed_final(self, text, now=None):
-        """Process one final result. Returns ``[(NEW|UPDATE, detection), ...]``."""
+    def feed_final(self, text, now=None, channel=FREE):
+        """Process one final result. Returns ``[(NEW|UPDATE, detection), ...]``.
+
+        ``channel`` is FREE for the general recogniser or REFERENCE for the
+        reference-only recogniser. That one is forced to express everything as
+        book names and numbers, so it is only trusted for complete chapter-and-
+        verse references, never for chapter-only or relative ones.
+        """
         if now is None:
             now = self.clock()
-        words = (text or "").split()
+        words = [w for w in (text or "").split() if w != "[unk]"]
         if not words:
             return []
-        ctx_tokens = normalise(" ".join(self._prev_words), "speech")
+        reference_only = channel == REFERENCE
+        # No carry-over for the reference-only channel: it turns unrelated speech into
+        # book names and numbers, and joining two of those utterances invents references.
+        prev = [] if reference_only else self._prev_words.get(channel, [])
+        ctx_tokens = normalise(" ".join(prev), "speech")
         new_tokens = normalise(" ".join(words), "speech")
-        self._prev_words = (self._prev_words + words)[-CONTEXT_WORDS:]
+        self._prev_words[channel] = (prev + words)[-CONTEXT_WORDS:]
         tokens = ctx_tokens + new_tokens
         boundary = len(ctx_tokens)
-        refs = parse_tokens(tokens, "speech", self.strict, self.relative, self.verse_count)
+        refs = parse_tokens(tokens, "speech", self.strict, self.relative and not reference_only, self.verse_count)
         events = []
         for ref in refs:
             if ref.span[1] <= boundary:
                 continue  # entirely inside the context we already processed
+            if reference_only and (ref.book is None or not ref.explicit_verse):
+                continue
             if ref.book is None:
                 last = self._last_absolute(now)
                 if last is None:

@@ -113,3 +113,41 @@ def test_speech_engine_threads(model, tmp_path):
     engine.stop()
     assert time.monotonic() - t < 2.5
     assert detected == "John 3:16", "no detection after %.1fs" % (time.monotonic() - t0)
+
+
+def test_reference_grammar_covers_books_and_numbers():
+    import json as _json
+    words = set(_json.loads(recognizer.reference_grammar()))
+    for w in ("genesis", "john", "corinthians", "psalm", "chapter", "verse", "eighteen", "hundred", "[unk]"):
+        assert w in words
+    assert "marriage" not in words
+
+
+@pytest.mark.vosk
+def test_reference_recognizer_detects(model, tmp_path):
+    """The engine with a grammar-capable model runs both recognisers and still detects."""
+    wav = str(tmp_path / "r.wav")
+    if not _synthesise("it is not good that the man should be alone, genesis two eighteen", wav):
+        _skip("no TTS available")
+    rate, pcm = _read_wav(wav)
+    events = queue.Queue()
+    engine = recognizer.SpeechEngine(events, Detector())
+    engine.model = model
+    engine.model_path = recognizer.find_model()
+    assert recognizer.supports_grammar(engine.model_path)
+    engine.state = "ready"
+    engine.start()
+    block = int(rate * 0.2) * 2
+    for i in range(0, len(pcm) + rate * 2, block):
+        engine.audio_queue.put((rate, pcm[i:i + block] or b"\0" * block))
+    found = []
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline and not found:
+        try:
+            ev = events.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        if ev[0] == "detect":
+            found.append(ev[2].ref.label())
+    engine.stop()
+    assert found == ["Genesis 2:18"]
