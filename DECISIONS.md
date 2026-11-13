@@ -95,6 +95,12 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **Vosk stays as a fallback** in the Windows legacy builds only, because ONNX Runtime may not
   load on Windows 7. If sherpa-onnx fails to import, "Automatic" picks Vosk with its reference
   listener.
+- **The Intel Mac build uses python.org Python 3.12, not 3.8.10 (v1.2.1).** python.org 3.8.10 bundles
+  Tk 8.6.8, which on macOS 11/12 drew both Biverse windows black and crashed (reported on an
+  Intel Mac running macOS 11/12 with v1.1.0). Tk 8.6.10+ fixed this. The python.org 3.12 installer
+  (universal2, macOS 10.13+) ships Tk 8.6.13+. On macOS the packaged self-test now *fails* if Tk
+  is older than 8.6.10, so a regression cannot ship. The Windows legacy builds stay on 3.8.10
+  for Windows 7.
 - **The minimum macOS for the Intel build rises from 10.13 to 10.15,** because sherpa-onnx's
   macOS wheels target 10.15.
 - **Audio is resampled to 16 kHz in Python before it reaches sherpa-onnx** (box-filter

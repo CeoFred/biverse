@@ -226,6 +226,11 @@ def self_test(report_path: str = "") -> int:
         r.withdraw()
         v = r.tk.call("info", "patchlevel")
         r.destroy()
+        if sys.platform == "darwin":
+            # Tk before 8.6.10 draws black windows and crashes on macOS 11+ (seen with
+            # python.org 3.8.10's Tk 8.6.8 in v1.0-v1.2 Intel builds).
+            parts = tuple(int(x) for x in v.split(".")[:3])
+            assert parts >= (8, 6, 10), "Tk %s is too old for macOS 11+ (needs 8.6.10 or newer)" % v
         return {"tk": v}
 
     check("database", db)
@@ -233,7 +238,7 @@ def self_test(report_path: str = "") -> int:
     check("parser", parser)
     check("displays", displays_)
     check("audio", audio_)
-    check("tk", tk_, critical=False)
+    check("tk", tk_, critical=sys.platform == "darwin")
     report["ok"] = ok
     text = json.dumps(report, indent=2, default=str)
     if report_path:
