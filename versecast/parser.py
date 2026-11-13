@@ -20,6 +20,9 @@ from .versification import VERSE_COUNTS
 CHAPTER_WORDS = frozenset(["chapter", "chapters", "chap", "ch"])
 VERSE_WORDS = frozenset(["verse", "verses", "vs", "v", "vv", "ver"])
 SEPARATORS = frozenset(["colon", ":"])
+# What the small Vosk model hears for "verse" between two numbers, e.g.
+# "john chapter three were sixteen". Only accepted inside a reference.
+VERSE_MISHEARD = frozenset(["were", "versus", "vers", "worse"])
 FILLER = frozenset(["of"])
 RANGE_WORDS = frozenset(["to", "through", "thru", "till", "til", "until"])
 
@@ -139,6 +142,9 @@ def _parse_tail(tokens, j):
     while k < n:
         t = tokens[k]
         if t in VERSE_WORDS or t in SEPARATORS:
+            verse_kw = True
+            k += 1
+        elif t in VERSE_MISHEARD and k + 1 < n and _is_num(tokens[k + 1]):
             verse_kw = True
             k += 1
         elif t == "and" and k + 1 < n and tokens[k + 1] in VERSE_WORDS:

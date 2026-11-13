@@ -100,7 +100,9 @@ jobs:
           "$PY" --version
           "$PY" -c "import struct, tkinter; print(struct.calcsize('P') * 8, 'bit; Tk', tkinter.TkVersion)"
           "$PY" -m pip install --upgrade "pip<25"
-          "$PY" -m pip install -r ${{ matrix.reqs }}
+          "$PY" -m pip install -r ${{ matrix.reqs }} certifi
+          # python.org's macOS Python has no CA bundle until "Install Certificates" runs
+          echo "SSL_CERT_FILE=$("$PY" -m certifi)" >> "$GITHUB_ENV"
 
       # ------------------------------------------------------------- data + model
       - uses: actions/cache@v4

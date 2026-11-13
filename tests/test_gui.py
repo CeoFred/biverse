@@ -173,6 +173,8 @@ def test_listen_never_blocks_ui(op, monkeypatch):
         raise RuntimeError("gave up")
 
     monkeypatch.setattr(op.capture, "_open", hanging_open)
+    monkeypatch.setattr(audio, "available", lambda: True)  # CI may have no PortAudio devices
+    op.engine._load_token += 1  # ignore the background model load finishing mid-test
     op.devices = [audio.InputDevice(0, "Fake mic", "Test API", 1, 16000.0, True)]
     op.input_combo.configure(values=[op.devices[0].label()])
     op.input_var.set(op.devices[0].label())

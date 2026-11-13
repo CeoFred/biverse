@@ -49,7 +49,7 @@ for dirpath, _dirs, files in os.walk(model_dir):
 import vosk  # noqa: E402
 
 vosk_dir = os.path.dirname(vosk.__file__)
-binaries = [(p, "vosk") for p in collect_dynamic_libs("vosk")]
+binaries = [(src, "vosk") for src, _dest in collect_dynamic_libs("vosk")]
 for pattern in ("libvosk*", "*.dll", "*.so", "*.dylib", "*.dyld"):
     for p in glob.glob(os.path.join(vosk_dir, pattern)):
         if (p, "vosk") not in binaries:

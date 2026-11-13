@@ -151,6 +151,10 @@ def test_sixty_six_books():
     ("proverbs three five to six", ["Proverbs 3:5-6"]),
     ("lamentations three twenty two", ["Lamentations 3:22"]),
     ("hebrews eleven one", ["Hebrews 11:1"]),
+    # mis-transcriptions seen from the small Vosk model in CI
+    ("please turn in your bible to jog chapter three were sixteen", ["John 3:16"]),
+    ("romans eight versus twenty eight", ["Romans 8:28"]),
+    ("we were sixteen people", []),
     ("john three sixteen to ninety", ["John 3:16-36"]),  # range end clamped
     ("john three eighteen to sixteen", ["John 3:18"]),  # backwards range ignored
 ])

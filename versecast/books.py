@@ -117,7 +117,8 @@ BOOKS = [
     Book(40, "MAT", "Matthew", ("matthew", "matthews", "mathew"), ("matt", "mat", "mt")),
     Book(41, "MRK", "Mark", ("mark",), ("mrk", "mk", "mr", "mar"), strict=True),
     Book(42, "LUK", "Luke", ("luke",), ("luk", "lk", "lu")),
-    Book(43, "JHN", "John", ("john",), ("jn", "jhn", "joh"), strict=True),
+    # "jog": small-model mis-hearings of "john" (strict, so only with chapter + verse)
+    Book(43, "JHN", "John", ("john", "jog", "johns"), ("jn", "jhn", "joh"), strict=True),
     Book(44, "ACT", "Acts", ("acts", "acts of the apostles", "the acts of the apostles"), ("act", "ac"), strict=True),
     Book(45, "ROM", "Romans", ("romans", "roman"), ("rom", "ro", "rm")),
     _nb(46, "1CO", "1 Corinthians", 1, "corinthians"),

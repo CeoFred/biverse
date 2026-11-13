@@ -64,6 +64,11 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **`Reference` has two extra fields:** `explicit_verse` (chapter-only references show verse 1
   and are not sent live by auto-mode safety) and `span` (token positions, used by the
   detector's context handling).
+- **Recorded mis-transcriptions (spec §15).** In CI, Vosk's small model heard espeak-ng's "john
+  chapter three verse sixteen" as "jog chapter three were sixteen". "jog" is now a spoken name
+  for John (strict, so it needs a chapter and a verse). "were", "versus", "vers" and "worse"
+  count as "verse" only *between* a chapter number and a verse number. "we were sixteen
+  people" still does not match. More entries should be collected from real sermons.
 - **Chapter-only after a verse.** Mentioning "John chapter 3" within 60 s of John 3:16 is
   treated as a repeat and ignored. Hearing "John 3" and then "verse 16" updates the
   detection to John 3:16, the same way range extension works.
