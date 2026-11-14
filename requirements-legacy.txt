@@ -7,6 +7,8 @@ certifi==2026.10.23
 # speech engines: Kroko (live) and Parakeet (pack) via sherpa-onnx; no numpy needed
 sherpa-onnx==2.0.1
 sherpa-onnx-core==2.0.1
+# idle screen and background pictures: 10.4.0 is the last Pillow for Python 3.8
+Pillow==10.4.0
 # vosk's own dependencies, pinned to versions that still support Python 3.8
 cffi==1.17.1
 requests==2.32.4

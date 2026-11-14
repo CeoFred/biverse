@@ -265,12 +265,29 @@ def self_test(report_path: str = "") -> int:
         assert cas > 0, "no CA certificates available for HTTPS model downloads"
         return {"ca_certificates": cas, "catalog": catalog.NAMES}
 
+    def pictures():
+        # idle screen and background pictures: JPEG/WebP decoding and Tk display come from Pillow
+        import io
+
+        from PIL import Image, ImageTk  # noqa: F401
+        formats = {}
+        for fmt in ("JPEG", "PNG", "WEBP"):
+            buf = io.BytesIO()
+            Image.new("RGB", (8, 4), (200, 30, 30)).save(buf, fmt)
+            buf.seek(0)
+            with Image.open(buf) as im:
+                im.load()
+                formats[fmt] = im.size == (8, 4)
+        assert all(formats.values()), formats
+        return {"pillow": Image.__version__, "formats": sorted(formats)}
+
     check("database", db)
     check("speech_model", model)
     check("parser", parser)
     check("displays", displays_)
     check("audio", audio_)
     check("https", https)
+    check("pictures", pictures)
     check("tk", tk_, critical=sys.platform == "darwin")
     report["ok"] = ok
     text = json.dumps(report, indent=2, default=str)
