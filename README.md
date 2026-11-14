@@ -5,7 +5,9 @@
 **Free, offline Bible-verse projection driven by live speech.** Biverse listens to the
 preacher, recognises spoken Bible references ("John chapter three verse sixteen") and shows
 the verse full-screen on the projector or TV you choose. Everything runs on the church
-computer. There is no internet connection, account, cloud service or telemetry.
+computer. There is no account, cloud service or telemetry, and it needs no internet connection.
+The only time it goes online is when you press **Download** for an optional model in
+Settings → Models.
 
 ![Operator window](docs/screenshots/operator-1920x1080.png)
 
@@ -31,7 +33,11 @@ computer. There is no internet connection, account, cloud service or telemetry.
 - **Emphasis**: bold, underline or highlight words of a verse on the projector.
 - **Sermon summary**: scriptures, key points and timeline are built in on every build. An
   optional offline AI pack writes a prose summary (see [AI summary](#ai-summary-optional)).
-- Modern light/dark interface that follows the computer's setting.
+- **Models in one click**: Settings → Models downloads Parakeet, the classic model or the AI
+  summary with a progress bar, checks it and switches to it. Offline computers can still
+  install the pack zip from a file.
+- Modern light/dark interface that follows the computer's setting. The operator window opens
+  full screen (F11, or Ctrl+Cmd+F on a Mac, switches).
 - Translations: **KJV, WEB, ASV, YLT and BBE** (all public domain). You can switch at any
   time, and you can import a translation your church is licensed for.
 - A borderless output window on any monitor, with auto-fitted text, colours, fonts, a shadow
@@ -58,8 +64,9 @@ Get the zip for your computer from the
 
 ### AI summary (optional)
 
-The AI summary is **not included in any app download**. Install `Biverse-ai-summary-pack-<version>.zip`
-(about 1.2 GB) with Settings → Speech → **Install model pack…**. The pack contains the
+The AI summary is **not included in any app download**. Download it in Settings → Models (about
+1.1 GB), or install `Biverse-ai-summary-pack-<version>.zip` (about 1.2 GB) with Settings → Models →
+**Install from a file…**. The pack contains the
 Qwen2.5 1.5B model and the llama.cpp program for four platforms, so it only works on these:
 
 | Build | AI summary with the pack |
@@ -72,8 +79,8 @@ Qwen2.5 1.5B model and the llama.cpp program for four platforms, so it only work
 | From source, Linux x64 | Yes |
 | From source, Linux or Windows on ARM | No |
 
-It also needs about 8 GB of RAM. On computers that can't run it, the summary window says why
-and Biverse refuses to install the pack. The built-in summary (scriptures, key points,
+It also needs about 8 GB of RAM. On computers that can't run it, Settings → Models and the
+summary window say why, and Biverse won't download or install the pack. The built-in summary (scriptures, key points,
 timeline) works everywhere and needs no pack.
 
 The real model is tested in CI on Linux x64 only. On macOS and Windows a stand-in program
@@ -151,7 +158,8 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `biverse/bible.py` | SQLite access: verses, ranges, next/prev, phrase search |
 | `biverse/audio.py` | Device listing, capture, downmix, level, async open, watchdog |
 | `biverse/recognizer.py` | Model discovery and choice, Kroko / Parakeet / Vosk engines, recogniser thread |
-| `biverse/modelpack.py` | Installs the optional model packs (Parakeet, AI summary) |
+| `biverse/catalog.py`, `downloads.py` | Pinned model sources, verified resumable downloads (Settings → Models) |
+| `biverse/modelpack.py` | Installs the optional model packs from a zip (Parakeet, AI summary) |
 | `biverse/follow.py`, `commands.py` | Following the reading; spoken navigation and version switching |
 | `biverse/emphasis.py`, `ui_emphasis.py` | Bold / underline / highlight marks per verse |
 | `biverse/summary.py`, `llm.py`, `ui_summary.py` | Sermon record, built-in summary, optional AI summary |
@@ -163,7 +171,8 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `biverse/settings.py`, `paths.py` | JSON settings, resource and config locations |
 | `tools/` | DB builder, model fetcher, translation importer, icons and website assets, screenshots |
 
-Runtime dependencies are only `sherpa-onnx`, `vosk==0.3.44`, `sounddevice` and the standard library (no numpy). See
+Runtime dependencies are only `sherpa-onnx`, `vosk==0.3.44`, `sounddevice`, `certifi` (HTTPS for model
+downloads) and the standard library (no numpy). See
 [DECISIONS.md](DECISIONS.md) for design choices and
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for licences.
 

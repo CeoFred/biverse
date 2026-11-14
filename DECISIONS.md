@@ -259,6 +259,27 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   treated as a repeat and ignored. Hearing "John 3" and then "verse 16" updates the
   detection to John 3:16, the same way range extension works.
 
+- **In-app model downloads (v1.4).** Biverse stays offline by default; it only goes online
+  when the user presses Download in Settings → Models. Sources and SHA-256 checksums live in
+  `biverse/catalog.py`, shared with `tools/fetch_model.py`, so build and app download the same
+  pinned files from the upstream hosts (sherpa-onnx and llama.cpp GitHub releases, Hugging
+  Face, alphacephei.com). We don't use our own release zips, whose checksums are only known
+  after CI. The AI summary download takes only this computer's llama.cpp program (about
+  1.1 GB in all, instead of the 1.2 GB all-platform zip).
+
+  Downloads resume with HTTP Range from a `.part` file, so a dropped church Wi-Fi connection
+  doesn't restart 480 MB. Files are verified before unpacking. Archives may only contain
+  regular files under the model's folder, and the model is unpacked into a staging folder and
+  moved into place whole. Archives are deleted after install. HTTPS uses the system
+  certificates plus certifi's, because python.org's macOS Python (used for the Mac builds) has
+  no system store.
+
+  The download runs on a worker thread owned by the operator window, so it continues when
+  Settings is closed. When it finishes, Biverse reloads the speech model if the setting is
+  Automatic, and otherwise asks first. If listening is on, it waits until Stop, so a model
+  switch never interrupts a sermon. "Install from a file…" stays for computers without
+  internet.
+
 ## UI behaviour
 
 - **Prev/Next (buttons and ←/→)** step the *live* slide when something is live, otherwise the
@@ -287,6 +308,12 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   Liberation Sans and Helvetica. Text is bold with a shadow, white on black.
 - **The settings dialog** is in its own module, `ui_settings.py`. Pure Preview/Live logic is in
   `controller.py`, so it can be unit-tested.
+
+- **The operator window opens full screen (v1.4)**, which suits the media desk and small
+  netbooks. F11 switches on Windows and Linux, and Ctrl+Cmd+F (or F11) on macOS; View → Full
+  screen does the same. The choice is remembered. Escape stays Blank, as operators expect, so
+  it does not leave full screen. The toggle tracks its own state because on macOS Tk reports
+  `-fullscreen` only after the animation.
 
 ## Packaging and CI
 
