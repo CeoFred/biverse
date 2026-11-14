@@ -2,7 +2,10 @@
 
 The bundled ``data/bible.db`` holds the public-domain translations. A second,
 optional database in the user's config folder holds translations imported
-with ``tools/import_translation.py``; both are queried transparently.
+with ``tools/import_translation.py``; both are queried transparently. Online
+versions from YouVersion (``online_bible.OnlineBibles``) are added with
+``set_online``; ``resolve`` swaps one for the fallback translation when it cannot
+be reached.
 
 Phrase search uses word-wise ``LIKE`` matching (about 20-40 ms over 31k rows)
 because FTS5/FTS4 are missing from some Python 3.8 SQLite builds.
@@ -18,6 +21,9 @@ from typing import List, Optional, Tuple
 
 from . import books
 from .parser import Reference
+
+if False:  # pragma: no cover - typing only
+    from .online_bible import OnlineBibles
 
 Pos = Tuple[int, int, int]  # book, chapter, verse
 
@@ -85,8 +91,18 @@ class Bible(object):
         self._chapters = {}
         for (b, c) in self._counts:
             self._chapters[b] = max(self._chapters.get(b, 0), c)
+        self.online = None  # type: Optional[OnlineBibles]
+        self.fallback = ""  # local translation shown when an online one cannot be reached
+
+    def set_online(self, online: Optional["OnlineBibles"]) -> None:
+        """Use these online versions (None: none). Codes that clash with a local
+        translation are left out; the local one wins."""
+        old, self.online = self.online, online
+        if old is not None and old is not online:
+            old.close()
 
     def close(self) -> None:
+        self.set_online(None)
         for conn in self._conns:
             conn.close()
 
@@ -99,11 +115,39 @@ class Bible(object):
 
     # -- structure ----------------------------------------------------------
     def translations(self) -> List[Tuple[str, str, str]]:
-        """``[(code, name, licence), ...]`` in display order."""
-        return list(self._translations)
+        """``[(code, name, licence), ...]`` in display order: local ones, then online ones."""
+        out = list(self._translations)
+        if self.online is not None:
+            out.extend((v.code, v.name, v.licence()) for v in list(self.online.versions.values())
+                       if v.code not in self._by_code)
+        return out
+
+    def local_codes(self) -> List[str]:
+        """Translations on this computer (no network needed)."""
+        return [t[0] for t in self._translations]
+
+    def is_online(self, code: str) -> bool:
+        return code not in self._by_code and self.online is not None and self.online.has(code)
 
     def has_translation(self, code: str) -> bool:
-        return code in self._by_code
+        return code in self._by_code or self.is_online(code)
+
+    def fallback_translation(self) -> str:
+        return self.fallback if self.fallback in self._by_code else self.default_translation()
+
+    def resolve(self, code: str, book: int, chapter: int) -> str:
+        """The translation to show for this chapter: ``code``, or the fallback when
+        ``code`` is an online version that cannot be had right now (or is unknown)."""
+        if code in self._by_code:
+            return code
+        if self.is_online(code) and self._online_verses(code, book, chapter):
+            return code
+        return self.fallback_translation()
+
+    def prefetch(self, code: str, book: int, chapter: int) -> None:
+        """Start fetching an online chapter in the background."""
+        if self.is_online(code) and 1 <= chapter <= self.chapter_count(book):
+            self.online.prefetch(code, book, chapter)
 
     def default_translation(self) -> str:
         return "KJV" if "KJV" in self._by_code else self._translations[0][0]
@@ -126,7 +170,19 @@ class Bible(object):
         except KeyError:
             raise KeyError("unknown translation %r" % code)
 
+    def _online_verses(self, code: str, book: int, chapter: int) -> dict:
+        """While the client is offline, never wait on the network: retry in the
+        background and answer from the cache."""
+        from .online_bible import OFFLINE
+        online = self.online
+        if online.state == OFFLINE:
+            online.prefetch(code, book, chapter)
+            return online.cached(code, book, chapter) or {}
+        return online.chapter(code, book, chapter) or {}
+
     def verse(self, code: str, book: int, chapter: int, verse: int) -> Optional[str]:
+        if self.is_online(code):
+            return self._online_verses(code, book, chapter).get(verse) or None
         with self._lock:
             row = self._conn(code).execute(
                 "SELECT text FROM verses WHERE translation=? AND book=? AND chapter=? AND verse=?",
@@ -134,6 +190,9 @@ class Bible(object):
         return row[0] if row else None
 
     def verses(self, code: str, book: int, chapter: int, start: int, end: int) -> List[Verse]:
+        if self.is_online(code):
+            got = self._online_verses(code, book, chapter)
+            return [Verse(book, chapter, v, got[v]) for v in sorted(got) if start <= v <= end and got[v]]
         with self._lock:
             rows = self._conn(code).execute(
                 "SELECT verse, text FROM verses WHERE translation=? AND book=? AND chapter=? "
@@ -171,7 +230,8 @@ class Bible(object):
 
     # -- search -------------------------------------------------------------
     def search(self, code: str, phrase: str, limit: int = 50) -> List[Verse]:
-        """Phrase search: exact phrase matches first, then all-words matches."""
+        """Phrase search: exact phrase matches first, then all-words matches.
+        Online versions cannot be searched; search ``search_code(code)`` instead."""
         phrase = phrase.strip()
         words = [w for w in re.split(r"[^\w]+", phrase.lower(), flags=re.UNICODE) if w]
         if not words:
@@ -200,6 +260,11 @@ class Bible(object):
         # 2. every word, anywhere in the verse
         run(" AND ".join(["text LIKE ? ESCAPE '\\'"] * len(words)), ["%" + _escape(w) + "%" for w in words])
         return results[:limit]
+
+
+    def search_code(self, code: str) -> str:
+        """The translation a search in ``code`` runs in (online ones use the fallback)."""
+        return code if code in self._by_code else self.fallback_translation()
 
 
 def _escape(word: str) -> str:

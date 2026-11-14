@@ -118,6 +118,13 @@ class SlideBuilder(object):
               fits=None) -> Slide:
         if sel is None:
             return Slide(EMPTY)
+        # an online version that cannot be reached right now shows the fallback instead
+        translation = self.bible.resolve(translation, sel.book, sel.chapter)
+        slide = self._slide(sel, translation, fit_range, fits)
+        slide.translation = translation
+        return slide
+
+    def _slide(self, sel: Selection, translation: str, fit_range: bool, fits) -> Slide:
         if fit_range and sel.is_range:
             verses = self.bible.verses(translation, sel.book, sel.chapter, sel.start, sel.end)
             text = verse_text(verses)

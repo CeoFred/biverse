@@ -182,7 +182,7 @@ def self_test(report_path: str = "") -> int:
         b = open_default()
         assert b is not None, "bible.db not found"
         out = {"path": b.path, "translations": {}}
-        for code, _, _ in b.translations():
+        for code in b.local_codes():
             n = b.total_verses(code)
             assert n == 31102, (code, n)
             out["translations"][code] = n
