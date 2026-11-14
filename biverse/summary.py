@@ -34,6 +34,9 @@ also even every many much may might must us thee thou thy ye unto saith hath dot
 CUES = ("the point is", "remember", "i want you to", "listen", "number one", "number two", "number three",
         "first", "secondly", "thirdly", "finally", "in conclusion", "the lesson", "this means", "god wants",
         "the bible says", "scripture says", "key", "important", "notice", "never forget", "the truth is")
+# Sentences that only move around the Bible are not points of the sermon.
+NAVIGATION = re.compile(r"\b(turn (with me )?to|open (your )?bibles?|let us read|lets read|please stand|"
+                        r"you may be seated|look at (verse|chapter)|next verse|go back)\b", re.I)
 
 
 class SermonLog(object):
@@ -136,7 +139,7 @@ def summarise(log: SermonLog, max_points: int = 7) -> Dict[str, object]:
     scored = []
     for k, (t, s) in enumerate(sents):
         n = len(_words(s))
-        if n < 7 or n > 60:
+        if n < 7 or n > 60 or NAVIGATION.search(s):
             continue
         cw = _content(s)
         if not cw:

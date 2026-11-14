@@ -84,8 +84,9 @@ def build_prompt(scriptures: List[str], points: List[str], themes: List[str]) ->
     notes = ["Scriptures read: " + ("; ".join(scriptures) if scriptures else "none detected"),
              "Main themes: " + (", ".join(themes) if themes else "-"), "", "Key sentences from the sermon, in order:"]
     notes += ["- " + p for p in points]
-    user = ("\n".join(notes) + "\n\nWrite: one sentence with the main message; then 3 to 5 short bullet points; "
-            "then one line starting 'Application:'. No more than 150 words.")
+    user = ("\n".join(notes) + "\n\nSummarise the message in your own words (do not copy the sentences). "
+            "Use exactly this format:\nMain message: <one sentence>\n- <point>\n- <point>\n- <point>\n"
+            "Application: <one sentence>\nNo more than 120 words.")
     return ("<|im_start|>system\n%s<|im_end|>\n<|im_start|>user\n%s<|im_end|>\n<|im_start|>assistant\n"
             % (system, user))
 

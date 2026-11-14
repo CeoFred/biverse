@@ -154,4 +154,6 @@ jobs:
           print("---- AI summary (%.1f s) ----\n%s" % (time.time() - t, text))
           assert len(text.split()) >= 15, text
           assert "love" in text.lower() or "grace" in text.lower(), text
+          assert "turn with me" not in text.lower(), text  # navigation is not a point
+          assert "main message" in text.lower() or "- " in text, text  # follows the format
           EOF

@@ -241,8 +241,6 @@ class OperatorWindow(object):
         self.live_label = ttk.Label(thumbs, text="—")
         self.preview_label.grid(row=2, column=0, sticky="w")
         self.live_label.grid(row=2, column=1, sticky="w", padx=(6, 0))
-        ttk.Button(thumbs, text=u"\u270e Emphasis", width=10, command=self.open_emphasis).grid(
-            row=2, column=1, sticky="e")
         thumbs.bind("<Configure>", lambda e: self._resize_thumbs(e.width))
         self.preview_canvas.bind("<Double-1>", lambda e: self.go_live())
 
@@ -258,8 +256,10 @@ class OperatorWindow(object):
             row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
         ttk.Button(buttons, text="BLACK (Shift+Esc)", command=self.black).grid(
             row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(2, 0))
-        self.follow_btn = ttk.Button(buttons, text="Pause following (F6)", command=self.toggle_following)
-        self.follow_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
+        self.follow_btn = ttk.Button(buttons, text=u"\u23f8 Pause (F6)", command=self.toggle_following)
+        self.follow_btn.grid(row=2, column=0, sticky="ew", pady=(4, 0), padx=(0, 2))
+        ttk.Button(buttons, text=u"\u270e Emphasis", command=self.open_emphasis).grid(
+            row=2, column=1, sticky="ew", pady=(4, 0), padx=(2, 2))
         self.follow_label = tk.Label(buttons, text="", anchor="w")
         self.follow_label.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(4, 0))
 
@@ -901,7 +901,7 @@ class OperatorWindow(object):
         else:
             text, color = u"\u25cf Following  %d%%" % int(100 * self.follower.progress), self.pal["ok"]
         self.follow_label.configure(text=text, foreground=color)
-        self.follow_btn.configure(text="Pause following (F6)" if self.following else "Resume following (F6)")
+        self.follow_btn.configure(text=u"\u23f8 Pause (F6)" if self.following else u"\u25b6 Resume (F6)")
 
     def go_live(self) -> None:
         if self.preview is None:

@@ -143,9 +143,11 @@ def apply(root, mode: str) -> Dict[str, str]:
     style.configure("TNotebook.Tab", background=p["surface2"], foreground=p["muted"], padding=(14, 6),
                     bordercolor=p["border"], lightcolor=p["surface2"])
     style.map("TNotebook.Tab", background=[("selected", p["surface"])], foreground=[("selected", p["text"])])
-    for w in ("Vertical.TScrollbar", "Horizontal.TScrollbar"):
+    for w in ("TScrollbar", "Vertical.TScrollbar", "Horizontal.TScrollbar"):
         style.configure(w, background=p["surface2"], troughcolor=p["surface"], bordercolor=p["surface"],
                         lightcolor=p["surface2"], darkcolor=p["surface2"], arrowcolor=p["muted"], gripcount=0)
+        style.map(w, background=[("active", p["border"]), ("pressed", p["border"])],
+                  lightcolor=[("active", p["border"])], darkcolor=[("active", p["border"])])
     style.configure("TPanedwindow", background=p["bg"])
     style.configure("Sash", sashthickness=6, gripcount=0, background=p["bg"])
     style.configure("TSeparator", background=p["border"])
