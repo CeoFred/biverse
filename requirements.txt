@@ -2,6 +2,8 @@
 # Runtime dependencies are deliberately minimal: vosk + sounddevice + stdlib.
 vosk==0.3.44
 sounddevice==0.5.6
+# CA certificates for HTTPS model downloads (python.org macOS Python has no system store)
+certifi==2026.10.23
 # speech engines: Kroko (live) and Parakeet (pack) via sherpa-onnx; no numpy needed
 sherpa-onnx==2.0.1
 sherpa-onnx-core==2.0.1

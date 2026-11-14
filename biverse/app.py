@@ -255,11 +255,20 @@ def self_test(report_path: str = "") -> int:
             assert parts >= (8, 6, 10), "Tk %s is too old for macOS 11+ (needs 8.6.10 or newer)" % v
         return {"tk": v}
 
+    def https():
+        # Settings -> Models downloads need CA certificates inside the packaged build (no network here)
+        from . import catalog
+        ctx = catalog._ssl_context()
+        cas = ctx.cert_store_stats().get("x509_ca", 0)
+        assert cas > 0, "no CA certificates available for HTTPS model downloads"
+        return {"ca_certificates": cas, "catalog": catalog.NAMES}
+
     check("database", db)
     check("speech_model", model)
     check("parser", parser)
     check("displays", displays_)
     check("audio", audio_)
+    check("https", https)
     check("tk", tk_, critical=sys.platform == "darwin")
     report["ok"] = ok
     text = json.dumps(report, indent=2, default=str)

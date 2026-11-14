@@ -131,11 +131,62 @@ def test_settings_dialog_opens(op):
     assert op.settings.appearance.bold is False
 
 
+def test_settings_models_tab_shows_every_model(op):
+    op.open_settings(tab="models")
+    op.root.update()
+    dlg = op.settings_dialog
+    assert dlg is not None and dlg.nb.select() == str(dlg.models_tab)
+    assert set(dlg.model_rows) == {"kroko", "parakeet", "vosk-small", "ai-summary"}
+    for row in dlg.model_rows.values():
+        assert row.button.cget("text") in ("Download", "Installed", "Not available")
+    op.open_settings()  # a second open raises the same window
+    assert op.settings_dialog is dlg
+    dlg._ok()
+    assert op.settings_dialog is None
+
+
+def test_download_progress_shown_in_models_tab(op, monkeypatch):
+    from biverse import downloads
+
+    class FakeJob(downloads.Job):
+        pass
+
+    job = FakeJob(downloads.item("vosk-small"))
+    job.update(10 * 10 ** 6, 41 * 10 ** 6, "download")
+    monkeypatch.setattr(op.downloads, "job", lambda item_id: job if item_id == "vosk-small" else None)
+    op.open_settings(tab="models")
+    op.root.update()
+    row = op.settings_dialog.model_rows["vosk-small"]
+    row.tick()
+    op.root.update()
+    assert row.button.cget("text") == "Cancel"
+    assert row.progress_text.cget("text").startswith("Downloading 10 MB of 41 MB (24%)")
+    assert int(float(row.bar.cget("value"))) == 243
+    job.state = "done"
+    op.settings_dialog._ok()
+
+
 def test_operator_full_screen_toggle_is_remembered(op):
     op.set_fullscreen(True)
     assert op.settings["operator_fullscreen"] is True and op.fullscreen_var.get() is True
     op.toggle_fullscreen()
     assert op.settings["operator_fullscreen"] is False and op.fullscreen_var.get() is False
+
+
+def test_finished_download_reloads_when_automatic(op, monkeypatch):
+    from biverse import downloads
+    calls = []
+    monkeypatch.setattr(op, "reload_model", lambda: calls.append("reload"))
+    op.settings["speech_model"] = "auto"
+    job = downloads.Job(downloads.item("vosk-small"))
+    job.state = "done"
+    op._on_download(job)
+    assert calls == ["reload"]
+    op.listening = True
+    op._on_download(job)
+    assert calls == ["reload"] and op._reload_after_listening  # waits until listening stops
+    op.listening = False
+    op._reload_after_listening = False
 
 
 def test_render_thumbnail_matches_output_aspect(op):

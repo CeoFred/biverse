@@ -99,7 +99,8 @@ for p in sorted(glob.glob(os.path.join(sherpa_lib, "*"))):
 if not any("onnxruntime" in os.path.basename(p) for p, _ in binaries):
     raise SystemExit("ONNX Runtime library not found in %s" % sherpa_lib)
 
-hiddenimports = ["_cffi_backend", "vosk.vosk_cffi", "sherpa_onnx", "sherpa_onnx.lib._sherpa_onnx"]
+hiddenimports = ["_cffi_backend", "vosk.vosk_cffi", "sherpa_onnx", "sherpa_onnx.lib._sherpa_onnx",
+                 "certifi", "ssl"]  # certifi + ssl: HTTPS for Settings -> Models downloads
 excludes = ["numpy", "PIL", "matplotlib", "PyQt5", "PySide2", "PySide6", "IPython", "pytest",
             "vosk.transcriber", "websockets"]
 

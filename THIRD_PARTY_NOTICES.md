@@ -18,6 +18,7 @@ Biverse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following
 | [PortAudio](http://www.portaudio.com/), bundled by sounddevice on Windows and macOS | Audio I/O library | MIT-style PortAudio licence |
 | cffi | Used by vosk and sounddevice | MIT |
 | requests, srt, tqdm | Imported by vosk; not used by Biverse | Apache-2.0 / MIT / MPL-2.0 AND MIT |
+| certifi | CA certificates for HTTPS model downloads (Settings → Models) | MPL-2.0 |
 | Python and Tcl/Tk (bundled by PyInstaller) | Runtime and GUI | PSF licence / Tcl/Tk BSD-style licence |
 | PyInstaller bootloader | Packaging | GPL-2.0 with a bootloader exception that allows distributing bundled apps under any licence |
 
