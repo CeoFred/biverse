@@ -170,6 +170,21 @@ class SettingsDialog(object):
                   style="Muted.TLabel", wraplength=420).grid(row=7, column=0, columnspan=2, sticky="w")
         ttk.Checkbutton(dt, text="Follow the reading: move to the next verse as the preacher finishes each one",
                         variable=self.follow).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        from .quotes import AUTO_LIVE_ALLOWED
+        self.quote_matching = tk.BooleanVar(value=s["quote_matching"])
+        self.quote_auto = tk.BooleanVar(value=s["quote_auto_live"] and AUTO_LIVE_ALLOWED)
+        ttk.Checkbutton(dt, text="Recognise verses the preacher quotes without saying the reference",
+                        variable=self.quote_matching).grid(row=9, column=0, columnspan=2, sticky="w", pady=(10, 2))
+        auto = ttk.Checkbutton(dt, text="Auto mode: send strong matches live automatically", variable=self.quote_auto)
+        auto.grid(row=10, column=0, columnspan=2, sticky="w", padx=(20, 0))
+        if not AUTO_LIVE_ALLOWED:
+            auto.state(["disabled"])
+        note = ("Matches appear under Possible references and in Preview; click one to check it, double-click "
+                "to send it live.")
+        if not AUTO_LIVE_ALLOWED:
+            note += " Sending them live automatically becomes available once it has been tested on real sermons."
+        ttk.Label(dt, text=note, style="Muted.TLabel", wraplength=420).grid(row=11, column=0, columnspan=2,
+                                                                            sticky="w")
         ttk.Checkbutton(dt, text="Extra reference listener (classic engine only; about twice the CPU)",
                         variable=self.ref_rec).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Label(dt, text="Turn off on very slow computers. It only adds references that include both a "
@@ -459,6 +474,8 @@ class SettingsDialog(object):
         s["reference_recognizer"] = bool(self.ref_rec.get())
         s["voice_commands"] = bool(self.voice_cmds.get())
         s["follow_reading"] = bool(self.follow.get())
+        s["quote_matching"] = bool(self.quote_matching.get())
+        s["quote_auto_live"] = bool(self.quote_auto.get())
         s["update_check"] = bool(self.update_check.get())
         s["idle_action"] = self.idle_action.get()
         try:

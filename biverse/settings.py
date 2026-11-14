@@ -44,6 +44,9 @@ DEFAULTS = {
     "auto_requires_verse": True,    # auto mode only sends chapter AND verse live
     "voice_commands": True,         # spoken "next verse", "go back", "next chapter"
     "follow_reading": True,         # follow the preacher reading and move to the next verse
+    # verses recognised from their words (quotes.py): suggest them under Possible references
+    "quote_matching": True,
+    "quote_auto_live": False,       # Auto mode: confirmed strong matches go live (needs AUTO_LIVE_ALLOWED)
     # idle screen: hide the verse when nothing has been read for idle_delay seconds
     "idle_action": "none",          # none | blank | background (appearance.idle_background / idle_image)
     "idle_delay": 30,

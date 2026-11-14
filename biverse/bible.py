@@ -262,6 +262,63 @@ class Bible(object):
         return results[:limit]
 
 
+    # -- quoted verses (quotes.py) --------------------------------------------
+    def has_ngram_index(self) -> bool:
+        return bool(self._ngram_conns())
+
+    def _ngram_conns(self) -> List[sqlite3.Connection]:
+        conns = getattr(self, "_ngram_cache", None)
+        if conns is None:
+            conns = []
+            for conn in self._conns:
+                try:
+                    with self._lock:
+                        row = conn.execute("SELECT value FROM meta WHERE key='ngram_index'").fetchone()
+                    if row:
+                        from .quotes import INDEX_VERSION
+                        row = row if row[0] == INDEX_VERSION else None
+                except sqlite3.Error:
+                    row = None
+                if row:
+                    conns.append(conn)
+            self._ngram_cache = conns
+        return conns
+
+    def stem_counts(self) -> dict:
+        """Verses containing each word stem (the larger count where two databases have it)."""
+        out = {}  # type: dict
+        for conn in self._ngram_conns():
+            with self._lock:
+                rows = conn.execute("SELECT key, df FROM stems").fetchall()
+            for k, n in rows:
+                if n > out.get(k, 0):
+                    out[k] = n
+        return out
+
+    def ngram_postings(self, buckets: List[int], keep_order: bool = False):
+        """Verse numbers (``quotes.Grid``) listed under each 3-gram bucket.
+
+        With ``keep_order`` the result has one entry per bucket, in order (several
+        databases merged); otherwise one entry per stored row.
+        """
+        from .quotes import unpack
+        found = {}  # type: dict
+        out = []
+        for conn in self._ngram_conns():
+            for start in range(0, len(buckets), 500):
+                chunk = buckets[start:start + 500]
+                sql = "SELECT bucket, refs FROM ngrams WHERE bucket IN (%s)" % ",".join("?" * len(chunk))
+                with self._lock:
+                    rows = conn.execute(sql, chunk).fetchall()
+                for h, blob in rows:
+                    refs = unpack(blob)
+                    out.append(refs)
+                    if keep_order:
+                        found.setdefault(h, set()).update(refs)
+        if keep_order:
+            return [found.get(h, set()) for h in buckets]
+        return out
+
     def search_code(self, code: str) -> str:
         """The translation a search in ``code`` runs in (online ones use the fallback)."""
         return code if code in self._by_code else self.fallback_translation()

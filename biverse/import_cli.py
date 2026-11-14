@@ -49,6 +49,8 @@ def run(argv=None) -> int:
         with conn:
             conn.execute("DELETE FROM verses WHERE translation=?", (code,))
             conn.execute("DELETE FROM translations WHERE code=?", (code,))
+        from . import quotes
+        quotes.build_index(conn)
         print("removed %s from %s" % (code, db))
         return 0
 
@@ -65,6 +67,8 @@ def run(argv=None) -> int:
         return 2
     for w in warnings:
         print("note: " + w)
+    from . import quotes
+    quotes.build_index(conn)  # quoted-verse matching also knows this translation's wording
     print("imported %s (%d verses) into %s" % (code, len(rows), db))
     return 0
 

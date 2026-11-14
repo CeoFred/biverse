@@ -610,6 +610,63 @@ def test_switches_back_when_another_request_came_back_first(op, tmp_path):
     assert op.output.translation == "NIV" and not op._online_note
 
 
+# -- possible references (verses recognised from their words) ----------------------------
+
+def _quote(op, text):
+    op._handle(("final", text))
+    op.root.update()
+
+
+def test_quote_goes_to_possible_references_and_preview(op, bible):
+    if not bible.has_ngram_index():
+        pytest.skip("no quoted-verse index")
+    _quote(op, "for god so loved the world that he gave his only begotten son")
+    rows = op.possible.get_children()
+    assert rows and op.possible.item(rows[0], "values")[0] == "John 3:16"
+    assert op.preview.verse_label() == "John 3:16"
+    assert "Possible reference" in op.preview_label.cget("text")
+    assert op.output.slide.reference != "John 3:16"  # Manual mode: nothing goes live by itself
+
+
+def test_possible_reference_click_previews_and_double_click_goes_live(op, bible):
+    if not bible.has_ngram_index():
+        pytest.skip("no quoted-verse index")
+    _quote(op, "i can do all things through christ which strengtheneth me")
+    op.set_preview(None)
+    row = op.possible.get_children()[0]
+    op.possible.selection_set(row)
+    op.root.update()
+    assert op.preview.verse_label() == "Philippians 4:13"
+    op._on_possible_double()
+    assert op.output.slide.reference == "Philippians 4:13"
+
+
+def test_no_keys_push_possible_references(op, bible):
+    if not bible.has_ngram_index():
+        pytest.skip("no quoted-verse index")
+    _quote(op, "the lord is my shepherd i shall not want")
+    assert not op.possible.bind("<Return>") and not op.root.bind_all("<Key-1>")
+
+
+def test_quotes_off_in_settings(op, bible):
+    op.settings["quote_matching"] = False
+    _quote(op, "for god so loved the world that he gave his only begotten son")
+    assert not op.possible.get_children()
+
+
+def test_live_verse_is_not_suggested(op, bible):
+    if not bible.has_ngram_index():
+        pytest.skip("no quoted-verse index")
+    _show(op, "john 3:16")
+    _quote(op, "for god so loved the world that he gave his only begotten son")
+    assert all(op.possible.item(r, "values")[0] != "John 3:16" for r in op.possible.get_children())
+
+
+def test_auto_live_setting_is_locked(op):
+    op.open_settings()
+    dlg = op.settings_dialog
+    assert dlg.quote_matching.get() is True and dlg.quote_auto.get() is False
+    dlg._ok()
 # -- idle screen ----------------------------------------------------------------------
 
 def _idle_settings(op, action, delay=30):
