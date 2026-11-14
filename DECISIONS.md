@@ -308,7 +308,11 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   once a workflow is on the default branch, and this lets the five builds run on the PR that
   introduces them.
 - **Icons are drawn by `tools/make_icons.py`** with the standard library alone (no Pillow).
-  ICO and ICNS embed PNG images.
+  ICO and ICNS embed PNG images. The mark (v1.3) is a gold voice waveform above an open Bible
+  with a ribbon bookmark, on a navy tile. One geometry feeds both the rasteriser and the SVG
+  writer, so the app icons, favicon and website logo always match. Below 33 px it draws three
+  chunkier bars so it stays legible. The website's social image (`tools/make_og_image.py`) is the
+  one asset that needs Pillow; it is a developer tool and is not used at runtime.
 - **Optional macOS signing and notarisation** use the secrets `MACOS_CODESIGN_ID` and
   `MACOS_NOTARY_PROFILE`. Without them the app is signed ad hoc.
 
