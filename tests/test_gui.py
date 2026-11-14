@@ -608,3 +608,78 @@ def test_switches_back_when_another_request_came_back_first(op, tmp_path):
         op.root.update()
         time.sleep(0.05)
     assert op.output.translation == "NIV" and not op._online_note
+
+
+# -- idle screen ----------------------------------------------------------------------
+
+def _idle_settings(op, action, delay=30):
+    op.settings["idle_action"] = action
+    op.settings["idle_delay"] = delay
+    op.apply_settings()
+
+
+def _wait_idle(op):
+    op.idle.last -= op.idle.delay + 1  # as if nothing had been read for longer than the delay
+    op._idle_tick()
+
+
+def test_idle_background_and_back_when_reading_resumes(op, bible):
+    from biverse.render import IDLE, TEXT
+    _idle_settings(op, "background")
+    _show(op, "john 3:16")
+    assert op.output.slide.kind == TEXT
+    _wait_idle(op)
+    assert op.output.slide.kind == IDLE
+    assert op.live_label.cget("text").startswith("IDLE")
+    assert op.live.selection.verse_label() == "John 3:16"  # still followed underneath
+    _read_aloud(op, " ".join(bible.verse("KJV", 43, 3, 16).split()[:4]))
+    assert op.output.slide.kind == TEXT and op.output.slide.reference == "John 3:16"
+
+
+def test_idle_ends_on_any_live_change(op):
+    from biverse.render import BLANK, TEXT
+    _idle_settings(op, "blank")
+    _show(op, "rom 8:28")
+    _wait_idle(op)
+    assert op.output.slide.kind == BLANK
+    op.step(1)
+    assert op.output.slide.kind == TEXT and op.output.slide.reference == "Romans 8:29"
+
+
+def test_idle_off_by_default_and_not_over_blank(op):
+    from biverse.render import BLANK, TEXT
+    _show(op, "ps 23:1")
+    _wait_idle(op)
+    assert op.output.slide.kind == TEXT  # "Keep the verse on screen" is the default
+    _idle_settings(op, "background")
+    op.blank()
+    _wait_idle(op)
+    assert op.output.slide.kind == BLANK and not op.live.idle
+
+
+def test_idle_slide_draws_colour_and_picture(op, tmp_path):
+    pil = pytest.importorskip("PIL.Image")
+    from biverse.render import IDLE, Appearance, Slide
+    path = str(tmp_path / "idle.jpg")
+    pil.new("RGB", (64, 36), (0, 90, 160)).save(path, "JPEG")
+    canvas = tk.Canvas(op.root, width=320, height=180)
+    a = Appearance(idle_background="#224466")
+    op.renderer.draw(canvas, Slide(IDLE), a, 320, 180)
+    assert canvas.cget("background") == "#224466" and not canvas.find_all()
+    a.idle_image = path
+    op.renderer.draw(canvas, Slide(IDLE), a, 320, 180)
+    items = canvas.find_all()
+    assert len(items) == 1 and canvas.type(items[0]) == "image"
+    assert (canvas._bg_image.width(), canvas._bg_image.height()) == (320, 180)  # scaled to cover
+
+
+def test_idle_settings_tab(op):
+    op.open_settings()
+    dlg = op.settings_dialog
+    dlg.idle_action.set("background")
+    dlg.idle_delay.set(45)
+    dlg.idle_bg.set("#101010")
+    dlg._ok()
+    assert op.settings["idle_action"] == "background" and op.settings["idle_delay"] == 45
+    assert op.settings.appearance.idle_background == "#101010"
+    assert op.idle.action == "background" and op.idle.delay == 45
