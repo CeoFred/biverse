@@ -390,9 +390,29 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   model downloader (`catalog.fetch_verified`): it resumes from a `.part` file after Cancel, a
   closed app or a dropped connection.
 
+## Idle screen
+
+- **What counts as "read".** The idle timer (`controller.IdleTimer`) restarts on every live
+  change (Go Live, Prev/Next, a voice command, the follower moving on) and whenever the reading
+  follower's progress through the live verse grows. So a long verse read slowly stays up, and
+  the verse comes back the moment the preacher carries on reading it. Redraws that are not live
+  changes (translation switch, settings, an online text arriving) leave the idle state alone.
+- **Hidden, not cleared.** Idle only changes what is drawn (`LiveState.idle`); the live selection
+  and the follower stay on the verse, which is what lets the reading bring it back. BLANK and
+  BLACK are the operator's and always win; the timer does not run under them.
+- **Off by default** ("Keep the verse on screen"), so nothing changes for existing users until
+  they choose an idle action.
+- **Pillow for pictures** (11.3.0; 10.4.0 is the last release for Python 3.8). Tk's PhotoImage
+  reads only PNG and GIF and scales by integer factors, which left gaps or blocky pictures on a
+  projector. Pillow adds JPEG and WebP, EXIF rotation and a smooth "cover" scale (centre-crop to
+  the screen). Pictures are decoded once at no more than 3840 px a side (JPEG draft mode), and the
+  scaled copy is cached per size. Without Pillow the app falls back to PhotoImage, and the
+  self-test's `pictures` check fails the CI build if Pillow is not bundled. Video (phase 2) is
+  still on the roadmap.
+
 ## Dependencies
 
-Runtime dependencies are only vosk, sounddevice and the standard library. vosk itself pulls
+Runtime dependencies are vosk, sounddevice, Pillow (pictures) and the standard library. vosk itself pulls
 in cffi, requests, srt and tqdm. Biverse never uses requests or tqdm, which vosk needs only for
 its model *download* helpers. The app goes online only for downloads the operator starts, online
 Bible versions when turned on, and the update check. Build-time-only tools are
