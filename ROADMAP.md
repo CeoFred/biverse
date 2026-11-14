@@ -7,22 +7,13 @@ Planned work. When something ships, its reasoning and benchmarks move to `DECISI
 1. **Website release skill** (`.claude/skills/website-release/`). After each release: gather the
    changes since the previous tag, check the release assets exist, update features, downloads, FAQ
    and screenshots on the website, verify, then open a PR.
-2. **Update notice, download with progress, install.** Biverse checks for a new release by itself
-   (on by default, can be turned off, never while listening) and offers it: Download / Later /
-   Skip this version. The download shows a progress bar with size, speed and time left, can be
-   cancelled and resumed, and keeps going in the background with progress in the status bar. The
-   update is installed with "Restart now" or "When I close Biverse". Each build records its
-   flavour in `build.json`, and CI publishes a signed `latest.json` (Ed25519). Installing swaps the
-   app folder from the new copy (`--apply-update`) and keeps a `.old` copy for rollback. Falls back
-   to opening the downloaded zip when the folder can't be written to or macOS runs a translocated
-   copy. The website FAQ about going online changes with it.
-3. **Idle screen.** When no verse has been read for N seconds (configurable, default 30): do
+2. **Idle screen.** When no verse has been read for N seconds (configurable, default 30): do
    nothing, clear to the blank screen, or show an idle background (a colour, a picture, or a
    looping muted video). The timer resets on any live change and while the follower still hears
    the live verse being read. The verse comes back as soon as a new one goes live or the reading
    resumes. Phase 1: colour and pictures (adds Pillow for JPEG/WebP and smooth scaling). Phase 2:
    video (PyAV, 64-bit builds only), after a CPU spike on an old laptop.
-4. **Verses recognised from their words.** Recognise a verse from the preacher's words when no
+3. **Verses recognised from their words.** Recognise a verse from the preacher's words when no
    reference is spoken. An index of word 3-grams in `bible.db` finds candidates, which are ranked
    by alignment. The best match goes to Preview, marked "Possible reference" with the words that
    matched. A "Possible references" list shows the top 5 with match strength, and the operator can
