@@ -130,6 +130,7 @@ jobs:
         env:
           BIVERSE_MACOS_MIN: ${{ matrix.macos_min }}
           BIVERSE_BUNDLE_MODELS: ${{ matrix.models || 'kroko' }}
+          BIVERSE_FLAVOUR: ${{ matrix.name }}
         run: '"$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/biverse.spec'
 
       - name: Version
@@ -240,6 +241,12 @@ jobs:
           find artifacts -name "*.zip" -exec cp {} release/ \;
           cp pack/*.zip release/
           cd release && sha256sum *.zip > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Signed update manifest (latest.json)
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          VERSION=$(python -c 'import biverse; print(biverse.__version__)')
+          python tools/make_update_manifest.py --version "$VERSION" --dir release --repo "${GITHUB_REPOSITORY}"
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
