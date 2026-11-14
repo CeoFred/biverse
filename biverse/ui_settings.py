@@ -82,8 +82,7 @@ class SettingsDialog(object):
         ttk.Button(bi, text="…", width=3, command=self._choose_image).pack(side="left")
         ttk.Button(bi, text="Clear", command=lambda: self.image.set("")).pack(side="left")
         row += 1
-        ttk.Label(ap, text="PNG or GIF. Use an image the size of the projector for best results.",
-                  style="Muted.TLabel").grid(row=row, column=0, columnspan=3, sticky="w")
+        ttk.Label(ap, text=_picture_note(), style="Muted.TLabel").grid(row=row, column=0, columnspan=3, sticky="w")
         row += 1
         ttk.Checkbutton(ap, text="Fit a whole verse range on one slide when it fits",
                         variable=self.fit_range).grid(row=row, column=0, columnspan=3, sticky="w", pady=(6, 0))
@@ -177,6 +176,7 @@ class SettingsDialog(object):
                            "chapter and a verse.", style="Muted.TLabel", wraplength=420).grid(
             row=5, column=0, columnspan=2, sticky="w")
 
+        self._build_idle(nb, s, a)
         self._build_updates(nb, s)
 
         if tab == "models":
@@ -193,6 +193,52 @@ class SettingsDialog(object):
         self.win.bind("<Escape>", lambda e: (self._ok(), "break")[1])
         self.win.grab_set()
         self._tick()
+
+    # -- idle screen --------------------------------------------------------------------
+    IDLE_CHOICES = [("none", "Keep the verse on screen"), ("blank", "Clear to the blank screen (background only)"),
+                    ("background", "Show the idle background below")]
+
+    def _build_idle(self, nb, s, a) -> None:
+        ib = ttk.Frame(nb, padding=10)
+        nb.add(ib, text="Idle screen")
+        self.idle_tab = ib
+        self.idle_action = tk.StringVar(value=s["idle_action"])
+        self.idle_delay = tk.IntVar(value=int(s["idle_delay"]))
+        self.idle_bg = tk.StringVar(value=a.idle_background)
+        self.idle_image = tk.StringVar(value=a.idle_image)
+        row = 0
+        ttk.Label(ib, text="When no verse has been read for").grid(row=row, column=0, sticky="w")
+        d = ttk.Frame(ib)
+        d.grid(row=row, column=1, columnspan=2, sticky="w")
+        tk.Spinbox(d, from_=5, to=3600, increment=5, textvariable=self.idle_delay, width=6).pack(side="left")
+        ttk.Label(d, text="seconds").pack(side="left", padx=4)
+        row += 1
+        for value, text in self.IDLE_CHOICES:
+            ttk.Radiobutton(ib, text=text, value=value, variable=self.idle_action).grid(
+                row=row, column=0, columnspan=3, sticky="w", pady=1)
+            row += 1
+        ttk.Label(ib, text="Idle background colour").grid(row=row, column=0, sticky="w", pady=(10, 2))
+        self.idle_swatch = tk.Label(ib, width=4, background=self.idle_bg.get(), relief="solid", borderwidth=1)
+        self.idle_swatch.grid(row=row, column=1, sticky="w", pady=(10, 2))
+        ttk.Button(ib, text="Choose\u2026", command=lambda: self._color(self.idle_bg, self.idle_swatch)).grid(
+            row=row, column=2, sticky="w", pady=(10, 2))
+        row += 1
+        ttk.Label(ib, text="Idle picture").grid(row=row, column=0, sticky="w", pady=2)
+        ttk.Entry(ib, textvariable=self.idle_image, width=28).grid(row=row, column=1, sticky="w")
+        bi = ttk.Frame(ib)
+        bi.grid(row=row, column=2, sticky="w")
+        ttk.Button(bi, text="\u2026", width=3,
+                   command=lambda: self._choose_image(self.idle_image, "Idle picture")).pack(side="left")
+        ttk.Button(bi, text="Clear", command=lambda: self.idle_image.set("")).pack(side="left")
+        row += 1
+        ttk.Label(ib, text=_picture_note() + " The picture covers the screen; the colour shows without one.",
+                  style="Muted.TLabel", wraplength=440, justify="left").grid(row=row, column=0, columnspan=3,
+                                                                             sticky="w")
+        row += 1
+        ttk.Label(ib, text="The timer restarts whenever a verse goes live or moves on, and while the preacher is "
+                           "still reading the live verse. The verse comes back as soon as the reading resumes or "
+                           "a new verse goes live.", style="Muted.TLabel", wraplength=440, justify="left").grid(
+            row=row, column=0, columnspan=3, sticky="w", pady=(10, 0))
 
     # -- updates ------------------------------------------------------------------------
     def _build_updates(self, nb, s) -> None:
@@ -362,11 +408,10 @@ class SettingsDialog(object):
             var.set(hexval)
             swatch.configure(background=hexval)
 
-    def _choose_image(self) -> None:
-        path = filedialog.askopenfilename(parent=self.win, title="Background image",
-                                          filetypes=[("Images", "*.png *.gif"), ("All files", "*")])
+    def _choose_image(self, var=None, title: str = "Background image") -> None:
+        path = filedialog.askopenfilename(parent=self.win, title=title, filetypes=_picture_types())
         if path:
-            self.image.set(path)
+            (var or self.image).set(path)
 
     def _choose_model(self) -> None:
         path = filedialog.askdirectory(parent=self.win, title="Choose speech model folder")
@@ -396,6 +441,8 @@ class SettingsDialog(object):
         a.shadow = bool(self.shadow.get())
         a.reference_position = self.refpos.get()
         a.background_image = self.image.get().strip()
+        a.idle_background = self.idle_bg.get()
+        a.idle_image = self.idle_image.get().strip()
         s.appearance = a
         s["fit_range"] = bool(self.fit_range.get())
         if bool(self.op_fullscreen.get()) != s["operator_fullscreen"]:
@@ -413,6 +460,11 @@ class SettingsDialog(object):
         s["voice_commands"] = bool(self.voice_cmds.get())
         s["follow_reading"] = bool(self.follow.get())
         s["update_check"] = bool(self.update_check.get())
+        s["idle_action"] = self.idle_action.get()
+        try:
+            s["idle_delay"] = max(5, min(3600, int(self.idle_delay.get())))
+        except (tk.TclError, ValueError):
+            pass
         self._apply_bibles()
         model_changed = (self.model_path.get().strip() != s["model_path"]
                          or self.speech_model.get() != s["speech_model"])
@@ -442,6 +494,18 @@ SPEECH_CHOICES = [
     ("vosk-small", "Classic (Vosk small)"),
     ("custom", "A model folder I choose"),
 ]
+
+
+def _picture_types():
+    from .render import PICTURE_TYPES, have_pillow
+    return PICTURE_TYPES if have_pillow() else [("Pictures", "*.png *.gif"), ("All files", "*")]
+
+
+def _picture_note() -> str:
+    from .render import have_pillow
+    if have_pillow():
+        return "JPEG, PNG, WebP or GIF; it is scaled to fill the projector."
+    return "PNG or GIF. Use an image the size of the projector for best results."
 
 
 def _fullscreen_label() -> str:

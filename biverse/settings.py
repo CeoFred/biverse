@@ -44,6 +44,9 @@ DEFAULTS = {
     "auto_requires_verse": True,    # auto mode only sends chapter AND verse live
     "voice_commands": True,         # spoken "next verse", "go back", "next chapter"
     "follow_reading": True,         # follow the preacher reading and move to the next verse
+    # idle screen: hide the verse when nothing has been read for idle_delay seconds
+    "idle_action": "none",          # none | blank | background (appearance.idle_background / idle_image)
+    "idle_delay": 30,
     "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
     # online Bible versions (YouVersion Platform API); each user enters their own app key
     "online_bibles": True,
@@ -87,6 +90,10 @@ def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
         data["ui_theme"] = "system"
     if data["speech_model"] not in ("auto", "both", "kroko", "parakeet", "vosk-small", "custom"):
         data["speech_model"] = "auto"
+    if data["idle_action"] not in ("none", "blank", "background"):
+        data["idle_action"] = "none"
+    if not 5 <= data["idle_delay"] <= 3600:
+        data["idle_delay"] = DEFAULTS["idle_delay"]
     if not 0 <= data["dedupe_window"] <= 3600:
         data["dedupe_window"] = DEFAULTS["dedupe_window"]
     return data

@@ -13,7 +13,7 @@ from typing import Optional
 from . import books
 from .bible import Bible
 from .parser import Reference
-from .render import BLACK, BLANK, EMPTY, TEXT, Slide, verse_text
+from .render import BLACK, BLANK, EMPTY, IDLE, TEXT, Slide, verse_text
 
 
 class Selection(object):
@@ -142,18 +142,70 @@ class SlideBuilder(object):
 
 
 class LiveState(object):
-    """What the projector shows: a selection, or blank/black over it."""
+    """What the projector shows: a selection, or blank/black over it, or the idle screen."""
 
     def __init__(self) -> None:
         self.selection = None  # type: Optional[Selection]
         self.cover = None  # type: Optional[str]  # None | BLANK | BLACK
+        self.idle = ""  # "" | BLANK | IDLE: the verse is hidden because nothing has been read for a while
 
     def slide(self, builder: SlideBuilder, translation: str, fit_range: bool = False, fits=None) -> Slide:
         if self.cover == BLACK:
             return Slide(BLACK)
         if self.cover == BLANK:
             return Slide(BLANK)
+        if self.idle and self.selection is not None:
+            return Slide(self.idle)
         return builder.slide(self.selection, translation, fit_range, fits)
 
     def toggle_cover(self, kind: str) -> None:
         self.cover = None if self.cover == kind else kind
+
+
+IDLE_ACTIONS = ("none", "blank", "background")
+
+
+class IdleTimer(object):
+    """Hides the live verse when nothing has been read for ``delay`` seconds.
+
+    ``touch(now)`` on any live change and whenever the reading follower hears
+    more of the live verse; ``tick(now, showing)`` about once a second. Both
+    return True when the screen must be redrawn (it went idle, or came back).
+    """
+
+    def __init__(self, action: str = "none", delay: float = 30.0) -> None:
+        self.action = action if action in IDLE_ACTIONS else "none"
+        self.delay = float(delay)
+        self.last = 0.0
+        self.idle = False
+
+    def configure(self, action: str, delay: float, now: float) -> bool:
+        self.action = action if action in IDLE_ACTIONS else "none"
+        self.delay = float(delay)
+        return self.touch(now)
+
+    @property
+    def enabled(self) -> bool:
+        return self.action != "none" and self.delay > 0
+
+    def kind(self) -> str:
+        """What ``LiveState.idle`` should be now: "" (show the verse), BLANK or IDLE."""
+        if not self.idle:
+            return ""
+        return BLANK if self.action == "blank" else IDLE
+
+    def touch(self, now: float) -> bool:
+        self.last = now
+        was, self.idle = self.idle, False
+        return was
+
+    def tick(self, now: float, showing: bool) -> bool:
+        """``showing``: a verse is live and not covered by blank/black."""
+        if not showing or not self.enabled:
+            self.last = now if not showing else self.last
+            was, self.idle = self.idle, False
+            return was
+        if not self.idle and now - self.last >= self.delay:
+            self.idle = True
+            return True
+        return False
