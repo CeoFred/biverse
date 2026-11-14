@@ -165,6 +165,18 @@ If the sermon audio is already on the computer (a livestream, or a video being p
 
 In **Detected**, click an entry to preview it again, or double-click it to send it live.
 
+**Verses quoted without a reference.** When the preacher quotes a verse without saying where
+it is ("for God so loved the world that he gave his only begotten Son…"), Biverse recognises
+it from the words. The verse appears in Preview marked *Possible reference*, with the words
+it heard, and under **Possible references** with up to four other candidates and how well
+each one matched. Click a candidate to preview it, and double-click to send it live. Biverse
+never sends a possible reference live by itself, so you always check it first. It recognises
+quotes in any of the bundled translations and in translations you imported, even when the
+preacher modernises the wording ("loves" for "loveth", "you" for "thee"). Common phrases
+that appear in many verses ("the children of Israel", "a mighty man of valour") are not
+suggested. The verse on screen is never suggested either, because Biverse is already
+following it. Turn it off in Settings → Detection.
+
 **References Biverse understands**
 
 - "John three sixteen", "John chapter three verse sixteen", "John three colon sixteen"

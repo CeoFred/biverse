@@ -62,6 +62,46 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   labelled with that code. It switches back by itself once a retry succeeds. Following the
   reading and phrase search use local translations only.
 
+## Quoted verses
+
+- **A 3-gram index, hashed and bucketed.** `quotes.build_index` cuts every verse of every local
+  translation into word 3-grams of stems (a light stemmer: "loveth", "loved" and "loves"
+  agree; "thee" is "you") and stores, per CRC32 bucket of 2^20, the verses containing one as
+  16-bit numbers on the KJV grid. Grams of three common words are skipped. For the five bundled
+  translations that is 632k buckets and 2.1M postings: `bible.db` grows from 26.9 to 36.8 MB
+  (about 8 MB more in each zip) and the build takes about 10 s. A `stems` table holds how many
+  verses contain each stem (the rarity weights). Buckets that merge two 3-grams only add a
+  candidate the alignment then rejects. FTS was not an option (missing from some Python 3.8
+  SQLite builds) and an index built at start-up would cost old laptops a minute of CPU.
+- **Candidates come from the newest words.** Verses hit by two or more 3-grams that touch the
+  newest utterance are aligned (longest common subsequence of stems) against up to 40 words
+  heard in the last 25 s, in every local translation. A match must reach into the newest
+  utterance; otherwise words from a sentence ago would raise suggestions later.
+- **Rarity, not word counts.** A match needs at least 5 aligned words (4 for a whole short
+  verse), at least 60 % of the words it spans, and evidence of at least 14: the sum of
+  log(31,102 / verses containing the stem) over matched content words. "The Lord is my
+  shepherd" passes on "shepherd"; "the children of Israel and the land" does not. The match is
+  cut at gaps of more than four words so stray "the … and" matches in earlier talk do not dilute
+  it.
+- **Stock phrases are not quotes.** If the rarest run of matched words appears in three or more
+  verses ("and the Lord said unto Moses", "a mighty man of valour", "the house of Israel and
+  the house of Judah"), there is no suggestion.
+- **Strong and confirmed.** Strong: strength 0.85 or more, 8 or more words, 0.2 ahead of the next
+  verse. Confirmed: strong in two utterances in a row, the second time with more words, so the
+  preacher is still quoting it. Only a confirmed match may go live by itself, in Auto mode,
+  with the setting on, and only once `quotes.AUTO_LIVE_ALLOWED` is set. It stays off until the
+  benchmark on real sermon transcripts shows no false go-lives.
+- **Clicked, never keyed.** Possible references go live by double-click only; number keys are
+  kept for typing a search anywhere.
+- **Benchmark** (`tools/bench_quotes.py`, transcripts in `tests/data/quotes/`). The generated
+  transcripts (`tools/make_quote_transcripts.py`) quote 111 well-known and 80 random verses in
+  five translations, whole or in part, modernised, with dropped and misheard words, between
+  original sermon talk full of Bible vocabulary. Result: 91.6 % of quotes become the top
+  suggestion (92.1 % in the top five), 0.5 false suggestions per 1,000 words, 61 confirmed
+  matches and no false go-lives. The misses are mostly heavily garbled quotes. A test keeps
+  these at 90 % or better, at most 1 false suggestion per 1,000 words, and no false go-lives.
+  Matching an utterance takes 0.3–5 ms.
+
 ## Parser
 
 - **A verse table is embedded for validation** (`biverse/versification.py`, generated from

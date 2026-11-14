@@ -13,14 +13,14 @@ Planned work. When something ships, its reasoning and benchmarks move to `DECISI
    the live verse being read. The verse comes back as soon as a new one goes live or the reading
    resumes. Phase 1: colour and pictures (adds Pillow for JPEG/WebP and smooth scaling). Phase 2:
    video (PyAV, 64-bit builds only), after a CPU spike on an old laptop.
-3. **Verses recognised from their words.** Recognise a verse from the preacher's words when no
-   reference is spoken. An index of word 3-grams in `bible.db` finds candidates, which are ranked
-   by alignment. The best match goes to Preview, marked "Possible reference" with the words that
-   matched. A "Possible references" list shows the top 5 with match strength, and the operator can
-   push any of them live (double-click, Enter, or keys 1–5). Setting: "Send strong matches live
-   automatically" (off by default; Auto mode only; a strong, unique match confirmed twice). A
-   benchmark must show no false go-lives before that setting can be turned on. Phase 2: an
-   optional embedding pack that matches paraphrases (suggestions only).
+3. **Verses recognised from their words: real sermons and phase 2.** Phase 1 shipped (see
+   DECISIONS.md): suggestions under Possible references, clicked to preview or go live. Next:
+   - benchmark real sermon transcripts: run `tools/bench_quotes.py transcript.txt --review
+     review.tsv`, mark each suggestion right or wrong, then label the quotes (`=> Ref`) and add
+     the file to `tests/data/quotes/`;
+   - when real transcripts show no false go-lives, set `quotes.AUTO_LIVE_ALLOWED` so "Send strong
+     matches live automatically" (Auto mode only, off by default) can be turned on;
+   - phase 2: an optional embedding pack that matches paraphrases (suggestions only).
 
 ## Later
 
