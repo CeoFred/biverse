@@ -102,8 +102,12 @@ llama.cpp b12366 program (MIT) for macOS (Apple Silicon and Intel), Windows
 x64 and Linux x64.
 
 Install: in Biverse open Settings > Speech > "Install model pack..." and choose
-this zip. Then Service > Sermon summary > "Write AI summary". Needs a 64-bit
-computer with about 8 GB of RAM; writing a summary takes up to a minute.
+this zip. Then Service > Sermon summary > "Write AI summary". Writing a summary
+takes up to a minute and needs about 8 GB of RAM.
+
+Works on: Windows 10/11 64-bit, macOS (Apple Silicon or Intel; 13.3+
+recommended) and Linux x64. Does NOT work on Windows 7/8, 32-bit Windows or
+ARM Windows/Linux.
 """
 
 

@@ -55,6 +55,13 @@ def inspect(zip_path: str) -> str:
             raise PackError("the pack's manifest is damaged")
         if manifest.get("engine") not in ("sherpa-online", "sherpa-offline", "vosk", "llm"):
             raise PackError("unknown engine in pack: %r" % manifest.get("engine"))
+        if manifest.get("engine") == "llm":
+            from . import llm
+            reason = llm.unsupported_reason()
+            if not reason and llm.platform_key() not in (manifest.get("bin") or {}):
+                reason = "This AI summary pack has no program for this computer (%s)." % llm.platform_key()
+            if reason:
+                raise PackError(reason)
         return manifests[0].split("/")[0]
 
 
