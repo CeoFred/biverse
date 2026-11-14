@@ -360,9 +360,40 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **Optional macOS signing and notarisation** use the secrets `MACOS_CODESIGN_ID` and
   `MACOS_NOTARY_PROFILE`. Without them the app is signed ad hoc.
 
+## In-app updates
+
+- **The manifest is signed, the zip is checksummed.** The release job writes `latest.json`
+  (version and, for each build flavour, the zip's URL, size and SHA-256) and
+  `latest.json.sig`, a base64 Ed25519 signature of its exact bytes, using the secret
+  `UPDATE_SIGNING_KEY` (`tools/make_update_key.py`, `tools/make_update_manifest.py`). The app
+  pins the public key in `biverse/updates.py` and installs nothing the signature and checksum do
+  not vouch for. Download URLs must be HTTPS on github.com. Without the secret, a release gets
+  no manifest and is simply not offered.
+- **Pure-Python Ed25519** (`biverse/ed25519.py`, the RFC 8032 algorithm, about 3 ms per check).
+  Python 3.8 has no Ed25519 in the standard library, and adding `cryptography` or PyNaCl to the
+  runtime for one check is not worth it. It is not constant-time, which does not matter for
+  verifying public data or for signing on a CI runner.
+- **Each build knows its flavour.** The spec writes `build.json` (`{"flavour": <matrix name>}`)
+  from `BIVERSE_FLAVOUR`, so a 32-bit Windows 7 copy is offered the `windows-legacy-x86` zip and
+  never a 64-bit one. A copy run from source has no `build.json` and is never offered updates.
+- **The new copy installs itself.** `--apply-update <app> --wait-pid <pid> [--relaunch]` runs
+  from the unpacked update: it waits for the old process to exit, renames the old app to
+  `Biverse.old` / `Biverse.old.app` (kept for rollback, replaced at the next update), copies
+  itself into place (`ditto` on macOS to keep signatures and links) and starts it. A failed copy
+  puts the old app back. The result goes to `updates/result.json` for the next start to report.
+  Copying rather than moving works on Windows, where a running program's folder cannot be moved.
+- **Fallback: show the zip.** When the app folder cannot be written to, or macOS runs a
+  translocated copy (`/AppTranslocation/`), Biverse downloads the zip and shows it in
+  Finder/Explorer instead.
+- **Never during a service.** Automatic checks happen at most every 12 hours and not while
+  listening; offers that arrive while listening wait until it stops. The download reuses the
+  model downloader (`catalog.fetch_verified`): it resumes from a `.part` file after Cancel, a
+  closed app or a dropped connection.
+
 ## Dependencies
 
 Runtime dependencies are only vosk, sounddevice and the standard library. vosk itself pulls
 in cffi, requests, srt and tqdm. Biverse never uses requests or tqdm, which vosk needs only for
-its model *download* helpers, and the app makes no network calls. Build-time-only tools are
+its model *download* helpers. The app goes online only for downloads the operator starts, online
+Bible versions when turned on, and the update check. Build-time-only tools are
 PyInstaller, pytest and ruff.

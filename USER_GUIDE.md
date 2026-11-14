@@ -3,7 +3,8 @@
 Biverse listens to the preacher. When it hears a Bible reference ("John chapter three verse
 sixteen"), it puts the verse on the projector or TV. It is free, needs no internet and sends
 nothing anywhere. It only goes online if you press **Download** for an optional model in
-Settings → Models.
+Settings → Models, and to check for a new version of Biverse about twice a day (never while
+listening; turn it off in Settings → Updates).
 
 This guide is written for church volunteers. You do not need to be technical.
 
@@ -293,6 +294,15 @@ Open **⚙ Settings**.
 - **Extra reference listener** (Detection tab; only used by the classic model): a second
   listener that only knows book names and numbers, which helps the classic model catch
   references it mishears. It roughly doubles the CPU used for listening.
+- **Updates:** Biverse checks for a new version by itself, at most twice a day and never while
+  it is listening. When one is out it asks: **Download**, **Later** or **Skip this version**.
+  The download continues in the background with its progress in the status bar; **Help →
+  Check for updates** cancels it, and checking again continues where it stopped. When it is
+  ready, choose **Restart now** or **When I close Biverse**. The previous version is kept next
+  to the new one (`Biverse.old` on Windows, `Biverse.old.app` on a Mac): if the new version
+  gives trouble, delete the new copy and rename the old one back. If Biverse's folder cannot be
+  written to (for example a Mac running it straight from Downloads), Biverse shows you the
+  downloaded zip to unpack instead. Untick the option in Settings → Updates to stop checking.
 - **Test output** shows a sample verse on the projector.
 
 Biverse remembers everything (devices, display, translation, mode and appearance) for next
