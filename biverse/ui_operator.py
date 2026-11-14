@@ -69,6 +69,8 @@ class OperatorWindow(object):
         self._reload_after_listening = False
         from .downloads import DownloadManager
         self.downloads = DownloadManager(on_finish=lambda job: self.events.put(("download", job)))
+        from .ui_update import UpdateController
+        self.updater = UpdateController(self)
 
         self._online_note = ""  # last "offline, showing KJV" status, so it is said once
         self.setup_online(refresh=True)
@@ -111,6 +113,7 @@ class OperatorWindow(object):
         self.engine.load(settings["speech_model"], settings["model_path"])
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(POLL_MS, self._poll)
+        self.updater.start()
 
     # ------------------------------------------------------------------ build
     def _build_menu(self) -> None:
@@ -144,6 +147,7 @@ class OperatorWindow(object):
         helpm = tk.Menu(menubar, tearoff=False)
         helpm.add_command(label="Keyboard shortcuts", command=self.show_shortcuts)
         helpm.add_command(label="Open log folder", command=self.open_log_folder)
+        helpm.add_command(label="Check for updates\u2026", command=self.updater.check)
         helpm.add_command(label="About %s" % APP_NAME, command=self.show_about)
         menubar.add_cascade(label="Help", menu=helpm)
         self.root.configure(menu=menubar)
@@ -602,6 +606,8 @@ class OperatorWindow(object):
                 self._prune_transcript()
             if self._tick % 20 == 10 and not self.listening:
                 self._download_status()
+            if self._tick % 20 == 15:
+                self.updater.poll()
             if self._tick % 20 == 5 and self._online_note:  # about once a second
                 self._online_back()
             if self._tick % 100 == 50 and self.settings["ui_theme"] == "system":
@@ -640,6 +646,8 @@ class OperatorWindow(object):
             self._status(ev[1], error=True)
         elif kind == "bibles":
             self._on_online_versions(ev[1])
+        elif kind == "update":
+            self.updater.on_event(ev[1], ev[2])
 
     def _on_model(self, state: str, detail: str) -> None:
         if state == "missing":
@@ -689,6 +697,8 @@ class OperatorWindow(object):
         if jobs:
             j = jobs[0]
             self._status("%s: %s" % (j.item.label, j.describe()))
+        elif self.updater.status_text():
+            self._status(self.updater.status_text())
 
     def _on_download(self, job) -> None:
         if self.settings_dialog is not None:
@@ -1508,5 +1518,6 @@ class OperatorWindow(object):
             log.exception("stopping audio")
         self.settings.save()
         self._save_sermon()
+        self.updater.on_close()
         self.output.destroy()
         self.root.destroy()
