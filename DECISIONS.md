@@ -44,6 +44,23 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **No FTS.** Word-wise `LIKE` search takes 20–40 ms over a translation, so the optional
   runtime FTS table was not added. Exact-order matches are ranked first, then all-words
   matches.
+- **Online versions come from the YouVersion Platform API, with each user's own app key**
+  (Settings -> Bibles). No key, no online versions; nothing is bundled. Text is fetched a
+  whole chapter at a time (`/v1/bibles/{id}/passages/JHN.3?format=html`; verse ranges such
+  as `JHN.3.16-JHN.3.18` return 404) and split on the `yv-v` verse markers. Psalm titles
+  (`d`), cross references (`rq`), signatures (`sig`) and notes (`iex`) are dropped. Verses a
+  version leaves out come back empty, so they get the usual "not included" slide.
+- **Licensed online text is never written to disk.** It stays in memory for one hour, the
+  API's own `max-age`. Versions under YouVersion licence 1 ("Public Domain and Creative
+  Commons") are also kept in `online_bibles/online_free.db`, so they work offline. Only the
+  version list (titles, copyright lines) is saved, tied to a hash of the key and languages.
+  The publisher licences (NIV, NASB, AMP, TPT...) were not reviewed; check them before
+  storing licensed text.
+- **Offline fallback.** One failed request marks the client offline for 30 s, so a dropped
+  connection costs one 3 s wait, not one per slide. While offline, chapters are retried in
+  the background only, and the slide shows the fallback translation (Settings, default KJV),
+  labelled with that code. It switches back by itself once a retry succeeds. Following the
+  reading and phrase search use local translations only.
 
 ## Parser
 

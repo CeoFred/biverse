@@ -66,10 +66,12 @@ class Appearance(object):
 class Slide(object):
     """What to show: verse text plus its reference line, or a blank/black screen."""
 
-    __slots__ = ("kind", "text", "reference", "verses", "marks")
+    __slots__ = ("kind", "text", "reference", "verses", "marks", "translation")
 
-    def __init__(self, kind: str = EMPTY, text: str = "", reference: str = "", verses=None, marks=None) -> None:
+    def __init__(self, kind: str = EMPTY, text: str = "", reference: str = "", verses=None, marks=None,
+                 translation: str = "") -> None:
         self.kind = kind
+        self.translation = translation  # the translation actually shown ("" when not set)
         self.text = text
         self.reference = reference
         self.verses = verses or []

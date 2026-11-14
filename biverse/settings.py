@@ -45,6 +45,11 @@ DEFAULTS = {
     "voice_commands": True,         # spoken "next verse", "go back", "next chapter"
     "follow_reading": True,         # follow the preacher reading and move to the next verse
     "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
+    # online Bible versions (YouVersion Platform API); each user enters their own app key
+    "online_bibles": True,
+    "youversion_key": "",
+    "online_languages": "en",       # language tags, comma separated ("en, fr, yo")
+    "offline_fallback": "KJV",      # shown when an online version cannot be reached
 }  # type: Dict[str, Any]
 
 

@@ -1,4 +1,4 @@
-"""Settings dialog: appearance, speech model and detection options."""
+"""Settings dialog: appearance, speech model, online Bibles and detection options."""
 
 from __future__ import annotations
 
@@ -142,6 +142,9 @@ class SettingsDialog(object):
                   style="Muted.TLabel").grid(row=foot + 1, column=1, columnspan=2, sticky="w", padx=(8, 0))
         md.columnconfigure(1, weight=1)
 
+        # -- online Bibles (YouVersion)
+        self._build_bibles(nb, s)
+
         # -- detection
         dt = ttk.Frame(nb, padding=10)
         nb.add(dt, text="Detection")
@@ -176,6 +179,8 @@ class SettingsDialog(object):
 
         if tab == "models":
             nb.select(md)
+        elif tab == "bibles":
+            nb.select(self.bibles_tab)
 
         btns = ttk.Frame(self.win, padding=(8, 0, 8, 8))
         btns.pack(fill="x")
@@ -186,6 +191,101 @@ class SettingsDialog(object):
         self.win.bind("<Escape>", lambda e: (self._ok(), "break")[1])
         self.win.grab_set()
         self._tick()
+
+    # -- online Bibles ----------------------------------------------------------------
+    def _build_bibles(self, nb, s) -> None:
+        bt = ttk.Frame(nb, padding=10)
+        nb.add(bt, text="Bibles")
+        self.bibles_tab = bt
+        self.online_on = tk.BooleanVar(value=s["online_bibles"])
+        self.yv_key = tk.StringVar(value=s["youversion_key"])
+        self.yv_langs = tk.StringVar(value=s["online_languages"])
+        self.fallback = tk.StringVar(value=self.op.bible.fallback_translation())
+        ttk.Label(bt, text="With a YouVersion app key, Biverse adds the Bible versions your key allows (NIV, NASB, "
+                           "AMP and others) while this computer is online. Without internet it shows the fallback "
+                           "version below instead.", style="Muted.TLabel", wraplength=640).grid(
+            row=0, column=0, columnspan=3, sticky="w")
+        ttk.Checkbutton(bt, text="Use online Bible versions", variable=self.online_on).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=(8, 2))
+        ttk.Label(bt, text="YouVersion app key").grid(row=2, column=0, sticky="w", pady=2)
+        self.key_entry = ttk.Entry(bt, textvariable=self.yv_key, width=46, show="\u2022")
+        self.key_entry.grid(row=2, column=1, sticky="w", pady=2)
+        self.show_key = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bt, text="Show", variable=self.show_key, command=lambda: self.key_entry.configure(
+            show="" if self.show_key.get() else "\u2022")).grid(row=2, column=2, sticky="w", padx=4)
+        ttk.Label(bt, text="Get a free key at platform.youversion.com. The key stays on this computer.",
+                  style="Muted.TLabel").grid(row=3, column=1, columnspan=2, sticky="w")
+        ttk.Label(bt, text="Languages").grid(row=4, column=0, sticky="w", pady=(6, 2))
+        ttk.Entry(bt, textvariable=self.yv_langs, width=20).grid(row=4, column=1, sticky="w", pady=(6, 2))
+        ttk.Label(bt, text="Language codes, comma separated, for example: en, fr, yo",
+                  style="Muted.TLabel").grid(row=5, column=1, columnspan=2, sticky="w")
+        ttk.Label(bt, text="When offline, show").grid(row=6, column=0, sticky="w", pady=(6, 2))
+        ttk.Combobox(bt, textvariable=self.fallback, values=self.op.bible.local_codes(), state="readonly",
+                     width=8).grid(row=6, column=1, sticky="w", pady=(6, 2))
+        row = ttk.Frame(bt)
+        row.grid(row=7, column=0, columnspan=3, sticky="w", pady=(10, 4))
+        ttk.Button(row, text="Connect and refresh list", command=self._connect).pack(side="left")
+        ttk.Button(row, text="Clear saved text", command=self._clear_online).pack(side="left", padx=6)
+        self.online_status = ttk.Label(bt, text="", style="Muted.TLabel", wraplength=640)
+        self.online_status.grid(row=8, column=0, columnspan=3, sticky="w")
+        self.versions_tree = ttk.Treeview(bt, columns=("code", "name", "licence"), show="headings", height=8)
+        for col, title, width in (("code", "Code", 90), ("name", "Version", 240), ("licence", "Licence", 320)):
+            self.versions_tree.heading(col, text=title)
+            self.versions_tree.column(col, width=width, anchor="w")
+        self.versions_tree.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(6, 0))
+        ttk.Label(bt, text="Licensed versions are never stored on this computer. Public-domain and Creative "
+                           "Commons versions are kept, so they also work offline.", style="Muted.TLabel",
+                  wraplength=640).grid(row=10, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        bt.columnconfigure(1, weight=1)
+        self.refresh_bibles()
+
+    def refresh_bibles(self) -> None:
+        """Show the connection state and the online versions."""
+        from . import online_bible
+        try:
+            online = self.op.bible.online
+            if online is None:
+                text = online_bible.STATE_TEXT[online_bible.NO_KEY] if self.online_on.get() else \
+                    "Online Bible versions are off."
+                versions = []
+            else:
+                text = online_bible.STATE_TEXT.get(online.state, "")
+                versions = sorted(online.versions.values(), key=lambda v: v.code.lower())
+                if online.state == online_bible.ONLINE or versions:
+                    text += " %d online version%s." % (len(versions), "" if len(versions) == 1 else "s")
+            self.online_status.configure(text=text)
+            self.versions_tree.delete(*self.versions_tree.get_children())
+            local = set(self.op.bible.local_codes())
+            for v in versions:
+                lic = v.licence().replace(" (YouVersion, online)", "")
+                if v.code in local:
+                    lic = "Installed on this computer already; the local copy is used"
+                self.versions_tree.insert("", "end", values=(v.code, v.name, lic))
+        except tk.TclError:
+            pass
+
+    def _apply_bibles(self, refresh: bool = True) -> None:
+        s = self.op.settings
+        s["online_bibles"] = bool(self.online_on.get())
+        s["youversion_key"] = self.yv_key.get().strip()
+        s["online_languages"] = self.yv_langs.get().strip() or "en"
+        s["offline_fallback"] = self.fallback.get()
+        self.op.setup_online(refresh=refresh)
+
+    def _connect(self) -> None:
+        if not self.yv_key.get().strip():
+            messagebox.showinfo("Online Bibles", "Enter your YouVersion app key first. You can get a free key at "
+                                "platform.youversion.com.", parent=self.win)
+            return
+        self.online_on.set(True)
+        self._apply_bibles(refresh=False)
+        self.op.refresh_online()
+        self.online_status.configure(text="Connecting\u2026")
+
+    def _clear_online(self) -> None:
+        if self.op.bible.online is not None:
+            self.op.bible.online.clear_cache()
+        self.online_status.configure(text="Saved Bible text cleared.")
 
     # -- models ------------------------------------------------------------------------
     def _speech_notes(self, installed) -> None:
@@ -285,6 +385,7 @@ class SettingsDialog(object):
         s["reference_recognizer"] = bool(self.ref_rec.get())
         s["voice_commands"] = bool(self.voice_cmds.get())
         s["follow_reading"] = bool(self.follow.get())
+        self._apply_bibles()
         model_changed = (self.model_path.get().strip() != s["model_path"]
                          or self.speech_model.get() != s["speech_model"])
         s["model_path"] = self.model_path.get().strip()

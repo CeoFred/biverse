@@ -69,6 +69,8 @@ class OperatorWindow(object):
         from .downloads import DownloadManager
         self.downloads = DownloadManager(on_finish=lambda job: self.events.put(("download", job)))
 
+        self._online_note = ""  # last "offline, showing KJV" status, so it is said once
+        self.setup_online(refresh=True)
         if not bible.has_translation(settings["translation"]):
             settings["translation"] = bible.default_translation()
 
@@ -82,7 +84,7 @@ class OperatorWindow(object):
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
         from .follow import ReadingFollower
-        codes = [c for c, _n, _l in bible.translations()]
+        codes = bible.local_codes()  # following never waits on the network
         self.follower = ReadingFollower(
             lambda b, c, v: [t for t in (bible.verse(code, b, c, v) for code in codes) if t], bible.verse_count)
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
@@ -589,6 +591,8 @@ class OperatorWindow(object):
                 self._prune_transcript()
             if self._tick % 20 == 10 and not self.listening:
                 self._download_status()
+            if self._tick % 20 == 5 and self._online_note:  # about once a second
+                self._online_back()
             if self._tick % 100 == 50 and self.settings["ui_theme"] == "system":
                 self._check_theme()
             if self._tick % 100 == 0 and self._displays_changed():
@@ -623,6 +627,8 @@ class OperatorWindow(object):
             self._on_audio(ev[1], ev[2])
         elif kind == "error":
             self._status(ev[1], error=True)
+        elif kind == "bibles":
+            self._on_online_versions(ev[1])
 
     def _on_model(self, state: str, detail: str) -> None:
         if state == "missing":
@@ -1024,6 +1030,7 @@ class OperatorWindow(object):
     def _render_preview(self) -> None:
         tr = self.translation()
         slide = self.builder.slide(self.preview, tr, self.settings["fit_range"], self._fits)
+        self._prefetch_next(self.preview, tr)
         self._preview_slide = slide
         self.preview_label.configure(text=self.preview.status_label() if self.preview else "—")
         self._draw_thumb(self.preview_canvas, slide)
@@ -1032,7 +1039,10 @@ class OperatorWindow(object):
         tr = self.translation()
         slide = self.live.slide(self.builder, tr, self.settings["fit_range"], self._fits)
         self._live_slide = slide
-        self.output.set_slide(slide, tr)
+        shown = slide.translation or tr
+        self.output.set_slide(slide, shown)
+        self._prefetch_next(self.live.selection, tr)
+        self._note_fallback(tr, shown)
         if self.live.selection is not None:
             # "move to verse 8" now means verse 8 of what is on screen
             self.detector.set_position(self.live.selection.book, self.live.selection.chapter)
@@ -1068,7 +1078,8 @@ class OperatorWindow(object):
             if w < 10:
                 w = 200
             self.renderer.draw(canvas, slide if slide.kind != EMPTY else Slide(EMPTY), self.settings.appearance,
-                               w, h, design_size=self.output.size, translation=self.translation())
+                               w, h, design_size=self.output.size,
+                               translation=slide.translation or self.translation())
             canvas.configure(scrollregion=(0, 0, w, h))
         except tk.TclError:
             log.exception("thumbnail draw failed")
@@ -1088,17 +1099,21 @@ class OperatorWindow(object):
         ref = parse_typed(text, verse_count=self.bible.verse_count)
         if ref is not None:
             sel = Selection.from_reference(ref)
-            self._add_result(sel, self.bible.verse(tr, sel.book, sel.chapter, sel.cur) or "")
+            shown = self.bible.resolve(tr, sel.book, sel.chapter)  # the fallback while offline
+            self._add_result(sel, self.bible.verse(shown, sel.book, sel.chapter, sel.cur) or "")
             self.set_preview(sel)
             self.search_info.configure(text="Reference %s loaded into Preview" % sel.passage_label())
             return
         t = time.perf_counter()
+        online_only = self.bible.is_online(tr)
+        tr = self.bible.search_code(tr)  # online versions cannot be searched; use the fallback
         found = self.bible.search(tr, text, limit=50)
         for v in found:
             self._add_result(Selection(v.book, v.chapter, v.verse, v.verse), v.text)
         self.search_info.configure(text="%d result%s in %s (%.0f ms)%s" % (
             len(found), "" if len(found) == 1 else "s", tr, (time.perf_counter() - t) * 1000,
-            " — showing the first 50" if len(found) >= 50 else ""))
+            " — showing the first 50" if len(found) >= 50 else "")
+            + (" (online versions cannot be searched)" if online_only else ""))
         kids = self.results.get_children()
         if kids:
             self.results.selection_set(kids[0])
@@ -1120,7 +1135,93 @@ class OperatorWindow(object):
 
     def _update_translation_name(self) -> None:
         names = {c: n for c, n, _ in self.bible.translations()}
-        self.translation_name.configure(text=names.get(self.translation(), ""))
+        code = self.translation()
+        name = names.get(code, "")
+        if self.bible.is_online(code):
+            from . import online_bible
+            state = self.bible.online.state
+            name += " (online)" if state != online_bible.OFFLINE else \
+                " (offline: showing %s)" % self.bible.fallback_translation()
+        self.translation_name.configure(text=name)
+
+    # ------------------------------------------------------------ online Bibles
+    def setup_online(self, refresh: bool = True) -> None:
+        """(Re)create the YouVersion client from the settings. Without a key there
+        are no online versions."""
+        from . import online_bible
+        s = self.settings
+        self.bible.fallback = s["offline_fallback"]
+        key = s["youversion_key"].strip() if s["online_bibles"] else ""
+        cur = self.bible.online
+        if cur is not None and cur.key == key and cur.languages == online_bible.OnlineBibles(
+                "", "", s["online_languages"]).languages:
+            return
+        if not key:
+            self.bible.set_online(None)
+        else:
+            self.bible.set_online(online_bible.OnlineBibles(
+                key, os.path.join(paths.config_dir(), "online_bibles"), s["online_languages"],
+                verse_count=self.bible.verse_count))
+            if refresh:
+                self.refresh_online()
+        if hasattr(self, "translation_combo"):
+            self._on_online_versions(True)
+
+    def refresh_online(self) -> None:
+        """Fetch the version list in the background; the result arrives as a "bibles" event."""
+        online = self.bible.online
+        if online is None:
+            return
+
+        def run():
+            ok = online.refresh_versions()
+            if online is self.bible.online:
+                self.events.put(("bibles", ok))
+        threading.Thread(target=run, name="online-versions", daemon=True).start()
+
+    def _on_online_versions(self, ok: bool) -> None:
+        codes = [c for c, _, _ in self.bible.translations()]
+        self.engine.translations = [(c, n) for c, n, _l in self.bible.translations()]
+        if hasattr(self, "translation_combo"):
+            self.translation_combo.configure(values=codes)
+            if self.translation() not in codes:
+                self.translation_var.set(self.bible.default_translation())
+                self.settings["translation"] = self.translation()
+            self._update_translation_name()
+            self._render_all()
+        if self.settings_dialog is not None:
+            try:
+                self.settings_dialog.refresh_bibles()
+            except Exception:
+                log.exception("settings refresh failed")
+
+    def _online_back(self) -> None:
+        """While the fallback is showing, retry the online version in the background and
+        switch back as soon as its chapter arrives."""
+        online, tr, sel = self.bible.online, self.translation(), self.live.selection or self.preview
+        if online is None or not self.bible.is_online(tr):
+            self._note_fallback(tr, tr)
+            return
+        if sel is not None and online.cached(tr, sel.book, sel.chapter) is not None:
+            self._render_all()
+        elif sel is not None:
+            # Retry even when another request has already brought the client back
+            # online; prefetch itself waits out the pause after a failure.
+            self.bible.prefetch(tr, sel.book, sel.chapter)
+
+    def _prefetch_next(self, sel: Optional[Selection], tr: str) -> None:
+        if sel is not None and self.bible.is_online(tr):
+            self.bible.prefetch(tr, sel.book, sel.chapter + 1)
+
+    def _note_fallback(self, wanted: str, shown: str) -> None:
+        note = "" if wanted == shown or not self.bible.is_online(wanted) else \
+            "%s is not reachable right now, so the %s is showing. It switches back when the internet is back." % (
+                wanted, shown)
+        if note != self._online_note:
+            self._online_note = note
+            if note:
+                self._status(note, error=True)
+            self._update_translation_name()
 
     def _on_mode(self) -> None:
         self.settings["mode"] = self.mode_var.get()
@@ -1203,7 +1304,8 @@ class OperatorWindow(object):
         if sel is None:
             self._status("Nothing to emphasise yet: show a verse first", error=True)
             return
-        EmphasisDialog(self, sel.book, sel.chapter, sel.cur, self.translation())
+        EmphasisDialog(self, sel.book, sel.chapter, sel.cur, self.bible.resolve(self.translation(), sel.book,
+                                                                                 sel.chapter))
 
     def open_settings(self, tab: str = "") -> None:
         from .ui_settings import SettingsDialog

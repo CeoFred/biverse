@@ -27,6 +27,8 @@ def op(bible, tmp_path):
     yield w
     if not w._closing:
         w.close()
+    bible.set_online(None)  # the Bible fixture is shared by the whole session
+    bible.fallback = ""
 
 
 def test_search_reference_loads_preview(op):
@@ -503,3 +505,76 @@ def test_sermon_record_and_summary_window(op):
     assert "John 3:16" in body and "Key points" in body
     assert "Scriptures" in w.text_for_export()
     w.win.destroy()
+
+
+def test_online_versions_appear_and_fall_back(op, tmp_path):
+    from biverse.online_bible import OnlineBibles
+    from tests.test_online_bible import FakeApi
+    api = FakeApi()
+    online = OnlineBibles("good-key", str(tmp_path / "yv"), "en", fetch=api)
+    assert online.refresh_versions()
+    op.bible.set_online(online)
+    op._on_online_versions(True)
+    assert "NIV" in op.translation_combo.cget("values")
+    op.search_var.set("matt 17:20")
+    op.search()
+    op.go_live()
+    op.translation_var.set("NIV")
+    op._on_translation()
+    assert op.output.slide.text.startswith("He replied") and op.output.translation == "NIV"
+    online._mem.clear()
+    api.down = True
+    op._render_all()
+    assert op.output.translation == "KJV" and "unbelief" in op.output.slide.text
+    assert "offline" in op.translation_name.cget("text")
+    labels = [op.live_canvas.itemcget(i, "text") for i in op.live_canvas.find_all()
+              if op.live_canvas.type(i) == "text"]
+    assert any(t.endswith("\u00b7 KJV") for t in labels), labels  # the thumbnail names what it shows
+    op.search_var.set("matt 17:19")
+    op.search()
+    assert op.results.item(op.results.get_children()[-1], "values")[1]  # offline search row has text
+
+
+def test_settings_bibles_tab_saves_the_key(op):
+    op.open_settings(tab="bibles")
+    d = op.settings_dialog
+    op.root.update()
+    assert "No YouVersion key" in d.online_status.cget("text")
+    d.yv_key.set("  my-key  ")
+    d._apply_bibles(refresh=False)
+    assert op.settings["youversion_key"] == "my-key"
+    assert op.bible.online is not None and op.bible.online.key == "my-key"
+    d.yv_key.set("")
+    d._apply_bibles(refresh=False)
+    assert op.bible.online is None
+    d._ok()
+
+
+def test_switches_back_when_another_request_came_back_first(op, tmp_path):
+    """Regression: a prefetch of the next chapter brought the client online first, and the
+    chapter on screen was never retried, so the fallback stayed up for good."""
+    import time
+    from biverse import online_bible
+    from biverse.online_bible import OnlineBibles
+    from tests.test_online_bible import FakeApi
+    api = FakeApi()
+    online = OnlineBibles("good-key", str(tmp_path / "yv"), "en", fetch=api)
+    assert online.refresh_versions()
+    op.bible.set_online(online)
+    op._on_online_versions(True)
+    op.search_var.set("matt 17:20")
+    op.search()
+    op.go_live()
+    op.translation_var.set("NIV")
+    api.down = True
+    op._on_translation()
+    assert op.output.translation == "KJV" and op._online_note
+    api.down = False
+    online._down_until = 0
+    online.state = online_bible.ONLINE  # as if the next-chapter prefetch had succeeded
+    end = time.time() + 5
+    while op.output.translation != "NIV" and time.time() < end:
+        op._online_back()
+        op.root.update()
+        time.sleep(0.05)
+    assert op.output.translation == "NIV" and not op._online_note
