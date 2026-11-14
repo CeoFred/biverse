@@ -16,7 +16,7 @@ from typing import Optional
 from . import APP_NAME, __version__, audio, displays, paths
 from .bible import Bible
 from . import commands
-from .controller import LiveState, Selection, SlideBuilder, chapter_step, step
+from .controller import IdleTimer, LiveState, Selection, SlideBuilder, chapter_step, step
 from .detector import NEW, Detector
 from .parser import parse_typed
 from .recognizer import SpeechEngine
@@ -50,6 +50,7 @@ class OperatorWindow(object):
         self.builder = SlideBuilder(bible, self.emphasis)
         self.preview = None  # type: Optional[Selection]
         self.live = LiveState()
+        self.idle = IdleTimer(settings["idle_action"], settings["idle_delay"])
         self.devices = []  # type: List[audio.InputDevice]
         self.displays = []  # type: List[displays.Display]
         self.display = None  # type: Optional[displays.Display]
@@ -627,6 +628,8 @@ class OperatorWindow(object):
                 self._download_status()
             if self._tick % 20 == 15:
                 self.updater.poll()
+            if self._tick % 10 == 3:  # about twice a second
+                self._idle_tick()
             if self._tick % 20 == 5 and self._online_note:  # about once a second
                 self._online_back()
             if self._tick % 100 == 50 and self.settings["ui_theme"] == "system":
@@ -1056,7 +1059,10 @@ class OperatorWindow(object):
         f = self.follower
         if (f.book, f.chapter, f.verse) != (sel.book, sel.chapter, sel.cur):
             self._restart_follower()
+        before = f.progress
         move = f.feed(text, time.monotonic(), final=final)
+        if move is not None or f.progress > before:
+            self._reading_heard()
         if move is None:
             self._update_follow_ui()
             return
@@ -1124,7 +1130,30 @@ class OperatorWindow(object):
         self.preview_label.configure(text=label)
         self._draw_thumb(self.preview_canvas, slide)
 
-    def _render_live(self) -> None:
+    # -- idle screen ------------------------------------------------------------------------
+    def _showing_verse(self) -> bool:
+        return self.live.selection is not None and self.live.cover is None
+
+    def _idle_tick(self) -> None:
+        if self.idle.tick(time.monotonic(), self._showing_verse()):
+            self._apply_idle()
+
+    def _apply_idle(self) -> None:
+        kind = self.idle.kind()
+        if kind != self.live.idle:
+            log.info("idle screen %s", "on (%s)" % kind if kind else "off")
+            self.live.idle = kind
+            self._render_live(touch=False)
+
+    def _reading_heard(self) -> None:
+        """The follower heard more of the live verse: keep it up, or bring it back."""
+        if self.idle.touch(time.monotonic()):
+            self._apply_idle()
+
+    def _render_live(self, touch: bool = True) -> None:
+        if touch:  # any live change resets the idle timer and shows the verse again
+            self.idle.touch(time.monotonic())
+            self.live.idle = ""
         tr = self.translation()
         slide = self.live.slide(self.builder, tr, self.settings["fit_range"], self._fits)
         self._live_slide = slide
@@ -1149,14 +1178,17 @@ class OperatorWindow(object):
             text = "BLACK"
         elif self.live.cover == BLANK:
             text = "BLANK"
+        elif self.live.idle and self.live.selection is not None:
+            text = u"IDLE \u2014 %s returns when the reading resumes" % self.live.selection.verse_label()
         else:
             text = self.live.selection.status_label() if self.live.selection else "—"
         self.live_label.configure(text=text)
         self._draw_thumb(self.live_canvas, slide)
 
     def _render_all(self) -> None:
+        """Redraw both (translation, appearance or online text changed): not a live change."""
         self._render_preview()
-        self._render_live()
+        self._render_live(touch=False)
 
     def _render_thumbs(self) -> None:
         if hasattr(self, "_preview_slide"):
@@ -1525,6 +1557,8 @@ class OperatorWindow(object):
         self.engine.use_reference = s["reference_recognizer"]
         self.engine.commands = s["voice_commands"]
         self.output.set_appearance(s.appearance)
+        self.idle.configure(s["idle_action"], s["idle_delay"], time.monotonic())
+        self.live.idle = self.idle.kind()  # a settings change shows the verse again and restarts the timer
         self._render_all()
         s.save()
 

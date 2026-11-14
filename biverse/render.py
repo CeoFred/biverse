@@ -28,14 +28,18 @@ TEXT = "text"
 BLANK = "blank"   # background only
 BLACK = "black"   # fully black
 EMPTY = "empty"   # nothing loaded yet (black)
+IDLE = "idle"     # idle background: nothing has been read for a while
 
 
 class Appearance(object):
     __slots__ = ("background", "foreground", "font_family", "bold", "shadow", "reference_position",
-                 "background_image", "reference_color", "highlight_color")
+                 "background_image", "reference_color", "highlight_color", "idle_background", "idle_image")
 
     def __init__(self, background="#000000", foreground="#FFFFFF", font_family="", bold=True, shadow=True,
-                 reference_position="bottom", background_image="", reference_color="", highlight_color="#FFD54A"):
+                 reference_position="bottom", background_image="", reference_color="", highlight_color="#FFD54A",
+                 idle_background="#000000", idle_image=""):
+        self.idle_background = idle_background
+        self.idle_image = idle_image
         self.highlight_color = highlight_color
         self.background = background
         self.foreground = foreground
@@ -120,6 +124,7 @@ class Renderer(object):
         self.root = root
         self._fit_cache = {}  # type: Dict[tuple, int]
         self._image_cache = {}  # type: Dict[tuple, object]
+        self._picture_cache = {}  # type: Dict[tuple, object]  # decoded pictures (Pillow)
         self._measure = None
         self._family = None  # type: Optional[str]
         self._fonts = {}  # Tk font objects for word-by-word drawing
@@ -238,10 +243,38 @@ class Renderer(object):
     def _background_image(self, path: str, width: int, height: int):
         if not path or not os.path.isfile(path):
             return None
-        key = (path, width, height)
+        try:
+            stamp = os.path.getmtime(path)
+        except OSError:
+            return None
+        key = (path, stamp, width, height)
         img = self._image_cache.get(key)
         if img is not None:
             return img
+        img = self._pillow_image(path, stamp, width, height)
+        if img is None:
+            img = self._tk_image(path, width, height)
+        if img is None:
+            return None
+        if len(self._image_cache) > 8:
+            self._image_cache.clear()
+        self._image_cache[key] = img
+        return img
+
+    def _pillow_image(self, path: str, stamp: float, width: int, height: int):
+        """JPEG/PNG/WebP/GIF scaled smoothly to cover ``width`` x ``height`` (None without Pillow)."""
+        src = load_picture(path, stamp, self._picture_cache)
+        if src is None:
+            return None
+        try:
+            from PIL import ImageTk
+            return ImageTk.PhotoImage(cover(src, width, height), master=self.root)
+        except Exception:
+            log.warning("cannot show picture %s", path, exc_info=True)
+            return None
+
+    def _tk_image(self, path: str, width: int, height: int):
+        """Without Pillow: PNG/GIF only, integer zoom/subsample."""
         try:
             import tkinter as tk
             src = tk.PhotoImage(master=self.root, file=path)
@@ -258,10 +291,13 @@ class Renderer(object):
             elif iw > width * 2 and ih > height * 2:
                 factor = max(1, min(iw // width, ih // height))
                 img = src.subsample(factor, factor)
-        if len(self._image_cache) > 8:
-            self._image_cache.clear()
-        self._image_cache[key] = img
         return img
+
+    def _draw_picture(self, canvas, path: str, width: int, height: int) -> None:
+        img = self._background_image(path, width, height)
+        if img is not None:
+            canvas.create_image(width // 2, height // 2, image=img, anchor="center")
+            canvas._bg_image = img  # keep a reference
 
     def draw(self, canvas, slide: Slide, appearance: Appearance, width: int, height: int,
              design_size: Optional[Tuple[int, int]] = None, translation: str = "") -> None:
@@ -276,12 +312,14 @@ class Renderer(object):
         if slide.kind in (BLACK, EMPTY):
             canvas.configure(background="#000000")
             return
+        if slide.kind == IDLE:
+            canvas.configure(background=appearance.idle_background)
+            if appearance.idle_image:
+                self._draw_picture(canvas, appearance.idle_image, width, height)
+            return
         canvas.configure(background=appearance.background)
         if appearance.background_image:
-            img = self._background_image(appearance.background_image, width, height)
-            if img is not None:
-                canvas.create_image(width // 2, height // 2, image=img, anchor="center")
-                canvas._bg_image = img  # keep a reference
+            self._draw_picture(canvas, appearance.background_image, width, height)
         if slide.kind == BLANK or not slide.text:
             return
 
@@ -321,6 +359,55 @@ class Renderer(object):
                 canvas.create_text(cx + off, s(lay.ref_y) + off, text=label, font=ref_font, anchor="center",
                                    fill="#000000")
             canvas.create_text(cx, s(lay.ref_y), text=label, font=ref_font, anchor="center", fill=color)
+
+
+PICTURE_TYPES = [("Pictures", "*.jpg *.jpeg *.png *.webp *.gif"), ("All files", "*.*")]
+MAX_PICTURE_SIDE = 3840  # pictures are shrunk to this when loaded (a 24 MP photo is 100 MB decoded)
+
+
+def have_pillow() -> bool:
+    try:
+        import PIL.Image  # noqa: F401
+        import PIL.ImageTk  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+def load_picture(path: str, stamp: float = 0.0, cache: Optional[dict] = None):
+    """A decoded RGB picture (rotated by its EXIF tag), or None without Pillow or when unreadable."""
+    key = (path, stamp)
+    if cache is not None and key in cache:
+        return cache[key]
+    try:
+        from PIL import Image, ImageOps
+    except Exception:
+        return None
+    try:
+        with Image.open(path) as im:
+            im.draft("RGB", (MAX_PICTURE_SIDE, MAX_PICTURE_SIDE))  # JPEG: decode at a reduced size
+            im = ImageOps.exif_transpose(im).convert("RGB")
+        if max(im.size) > MAX_PICTURE_SIDE:
+            im.thumbnail((MAX_PICTURE_SIDE, MAX_PICTURE_SIDE), _lanczos())
+    except Exception:
+        log.warning("cannot load picture %s", path, exc_info=True)
+        im = None
+    if cache is not None:
+        if len(cache) > 2:
+            cache.clear()
+        cache[key] = im
+    return im
+
+
+def cover(im, width: int, height: int):
+    """Scale and centre-crop ``im`` to exactly ``width`` x ``height`` (like CSS ``object-fit: cover``)."""
+    from PIL import ImageOps
+    return ImageOps.fit(im, (max(1, width), max(1, height)), _lanczos())
+
+
+def _lanczos():
+    from PIL import Image
+    return getattr(Image, "Resampling", Image).LANCZOS
 
 
 def _tk_font(root, cache, family, px, bold, underline):

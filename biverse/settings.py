@@ -47,6 +47,9 @@ DEFAULTS = {
     # verses recognised from their words (quotes.py): suggest them under Possible references
     "quote_matching": True,
     "quote_auto_live": False,       # Auto mode: confirmed strong matches go live (needs AUTO_LIVE_ALLOWED)
+    # idle screen: hide the verse when nothing has been read for idle_delay seconds
+    "idle_action": "none",          # none | blank | background (appearance.idle_background / idle_image)
+    "idle_delay": 30,
     "reference_recognizer": True,   # second, reference-only recogniser (more detections, ~2x CPU)
     # online Bible versions (YouVersion Platform API); each user enters their own app key
     "online_bibles": True,
@@ -90,6 +93,10 @@ def _validate(data: Dict[str, Any]) -> Dict[str, Any]:
         data["ui_theme"] = "system"
     if data["speech_model"] not in ("auto", "both", "kroko", "parakeet", "vosk-small", "custom"):
         data["speech_model"] = "auto"
+    if data["idle_action"] not in ("none", "blank", "background"):
+        data["idle_action"] = "none"
+    if not 5 <= data["idle_delay"] <= 3600:
+        data["idle_delay"] = DEFAULTS["idle_delay"]
     if not 0 <= data["dedupe_window"] <= 3600:
         data["dedupe_window"] = DEFAULTS["dedupe_window"]
     return data

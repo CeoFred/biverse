@@ -295,8 +295,8 @@ On a Mac, use Cmd instead of Ctrl.
 Open **⚙ Settings**.
 
 - **Appearance:** background and text colours, font, bold, text shadow, reference line at the
-  bottom or top, and a background image (PNG or GIF, ideally the projector's size). You can
-  also choose to show a short verse range on one slide when it fits.
+  bottom or top, and a background picture (JPEG, PNG, WebP or GIF; it is scaled to fill the
+  projector). You can also choose to show a short verse range on one slide when it fits.
 - **Appearance** also has "Open the operator window full screen" (on by default). F11 (on a
   Mac, Ctrl+Cmd+F) or **View → Full screen** switches it at any time.
 - **Speech:** which speech model to use (see below).
@@ -306,6 +306,13 @@ Open **⚙ Settings**.
 - **Extra reference listener** (Detection tab; only used by the classic model): a second
   listener that only knows book names and numbers, which helps the classic model catch
   references it mishears. It roughly doubles the CPU used for listening.
+- **Idle screen:** what the projector shows when no verse has been read for a while (30 seconds
+  by default): keep the verse on screen (the default), clear to the blank screen, or show an
+  idle background, which is a colour or a picture of your choice (for example the church logo or
+  the sermon title slide). The timer restarts whenever a verse goes live or moves on, and while
+  the preacher is still reading the live verse. The verse comes back by itself as soon as the
+  reading resumes, or when a new verse goes live. The operator window's Live label says **IDLE**
+  while it is hidden. BLANK and BLACK work as before and always win.
 - **Updates:** Biverse checks for a new version by itself, at most twice a day and never while
   it is listening. When one is out it asks: **Download**, **Later** or **Skip this version**.
   The download continues in the background with its progress in the status bar; **Help →
