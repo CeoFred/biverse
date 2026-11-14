@@ -8,6 +8,8 @@
 #   BIVERSE_MACOS_MIN       LSMinimumSystemVersion (default 10.13)
 #   BIVERSE_CODESIGN_ID     optional Developer ID identity for macOS signing
 #   BIVERSE_ENTITLEMENTS    optional entitlements plist for that signing
+#   BIVERSE_FLAVOUR         build name recorded in build.json (CI matrix name, e.g. macos-arm);
+#                           in-app updates download the release zip of the same name
 
 import glob
 import json
@@ -38,6 +40,14 @@ datas = [
     (db, "data"),
     (os.path.join(ROOT, "assets"), "assets"),
 ]
+FLAVOUR = os.environ.get("BIVERSE_FLAVOUR", "").strip()
+if FLAVOUR:
+    build_json = os.path.join(ROOT, "build", "build.json")
+    os.makedirs(os.path.dirname(build_json), exist_ok=True)
+    with open(build_json, "w", encoding="utf-8") as f:
+        json.dump({"flavour": FLAVOUR, "version": VERSION}, f)
+    datas.append((build_json, "."))
+print("build flavour:", FLAVOUR or "(none: in-app updates off)")
 bundled = {}
 models_root = os.path.join(ROOT, "models")
 for name in sorted(os.listdir(models_root)) if os.path.isdir(models_root) else []:
