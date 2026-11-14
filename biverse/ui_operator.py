@@ -88,6 +88,10 @@ class OperatorWindow(object):
 
         from .follow import ReadingFollower
         codes = bible.local_codes()  # following never waits on the network
+        from .quotes import QuoteMatcher
+        self.quotes = QuoteMatcher(bible, codes)
+        self._quotes = {}  # type: Dict[str, object]  # Possible references row -> Match
+        self._preview_note = ""
         self.follower = ReadingFollower(
             lambda b, c, v: [t for t in (bible.verse(code, b, c, v) for code in codes) if t], bible.verse_count)
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
@@ -255,6 +259,21 @@ class OperatorWindow(object):
         self.detected.bind("<Double-1>", lambda e: self._on_detection_double())
         self.detected.bind("<Return>", lambda e: self._on_detection_double())
         left.add(dframe, weight=1)
+
+        # verses recognised from the preacher's words (no reference spoken). Clicked, never keyed:
+        # the number keys belong to typing a search anywhere.
+        qframe = ttk.LabelFrame(left, text="POSSIBLE REFERENCES  \u00b7  click = preview, double-click = go live",
+                                padding=6)
+        self.possible = ttk.Treeview(qframe, columns=("ref", "match", "heard"), show="headings",
+                                     selectmode="browse", height=5)
+        for col, title, width, stretch in (("ref", "Reference", 130, False), ("match", "Match", 80, False),
+                                           ("heard", "Words heard", 200, True)):
+            self.possible.heading(col, text=title, anchor="w")
+            self.possible.column(col, width=width, stretch=stretch, anchor="w")
+        self.possible.pack(fill="both", expand=True)
+        self.possible.bind("<<TreeviewSelect>>", lambda e: self._on_possible_click())
+        self.possible.bind("<Double-1>", lambda e: self._on_possible_double())
+        left.add(qframe, weight=1)
 
         # right: thumbnails
         thumbs = ttk.Frame(right)
@@ -628,6 +647,7 @@ class OperatorWindow(object):
                 self._follow(ev[1], final=False)
         elif kind == "final":
             self._add_final(ev[1])
+            self._match_quotes(ev[1])
             if not self._partials_seen:  # Parakeet alone: only phrase-level text to follow
                 self._follow(ev[1], final=True)
         elif kind == "detect":
@@ -865,6 +885,50 @@ class OperatorWindow(object):
         else:
             self.set_preview(sel.copy())
 
+    # -- verses recognised from their words ---------------------------------------------------
+    def _match_quotes(self, text: str) -> None:
+        if not self.settings["quote_matching"]:
+            return
+        try:
+            found = self.quotes.feed(text)
+        except Exception:
+            log.exception("quote matching")
+            return
+        if found:
+            self._on_quotes(found)
+
+    def _on_quotes(self, found) -> None:
+        from .quotes import AUTO_LIVE_ALLOWED
+        self.possible.delete(*self.possible.get_children())
+        self._quotes.clear()
+        for k, m in enumerate(found):
+            iid = "q%d" % k
+            self._quotes[iid] = m
+            self.possible.insert("", "end", iid=iid, values=(m.label(), _strength_bar(m.strength), m.heard))
+        top = found[0]
+        log.info("possible reference %s (%.2f%s): %r", top.label(), top.strength,
+                 ", confirmed" if top.confirmed else ", strong" if top.strong else "", top.heard)
+        sel = Selection(top.book, top.chapter, top.verse, top.verse)
+        self.set_preview(sel, note=_heard_note(top.heard))
+        if (top.confirmed and AUTO_LIVE_ALLOWED and self.settings["quote_auto_live"]
+                and self.mode_var.get() == "auto"):
+            self.go_live()
+
+    def _reset_quotes(self) -> None:
+        self.quotes.reset()
+        self._quotes.clear()
+        self.possible.delete(*self.possible.get_children())
+
+    def _on_possible_click(self) -> None:
+        sel = self.possible.selection()
+        m = self._quotes.get(sel[0]) if sel else None
+        if m is not None:
+            self.set_preview(Selection(m.book, m.chapter, m.verse, m.verse), note=_heard_note(m.heard))
+
+    def _on_possible_double(self) -> None:
+        self._on_possible_click()
+        self.go_live()
+
     def _on_detection_click(self) -> None:
         sel = self.detected.selection()
         if sel and sel[0] in self._detections:
@@ -955,8 +1019,9 @@ class OperatorWindow(object):
                 return Selection(base.book, c, v, v)
         return None
 
-    def set_preview(self, sel: Optional[Selection]) -> None:
+    def set_preview(self, sel: Optional[Selection], note: str = "") -> None:
         self.preview = sel
+        self._preview_note = note  # e.g. "Possible reference - heard ..."
         self._render_preview()
 
     def set_following(self, on: bool, source: str = "") -> None:
@@ -1053,7 +1118,10 @@ class OperatorWindow(object):
         slide = self.builder.slide(self.preview, tr, self.settings["fit_range"], self._fits)
         self._prefetch_next(self.preview, tr)
         self._preview_slide = slide
-        self.preview_label.configure(text=self.preview.status_label() if self.preview else "—")
+        label = self.preview.status_label() if self.preview else "—"
+        if self._preview_note and self.preview is not None:
+            label = "%s  \u00b7  %s" % (label, self._preview_note)
+        self.preview_label.configure(text=label)
         self._draw_thumb(self.preview_canvas, slide)
 
     def _render_live(self) -> None:
@@ -1064,6 +1132,10 @@ class OperatorWindow(object):
         self.output.set_slide(slide, shown)
         self._prefetch_next(self.live.selection, tr)
         self._note_fallback(tr, shown)
+        sel_live = self.live.selection
+        # the verses on screen are followed, not "quoted": never suggest them as possible references
+        self.quotes.exclude = set() if sel_live is None else {
+            (sel_live.book, sel_live.chapter, v) for v in range(sel_live.start, sel_live.end + 1)}
         if self.live.selection is not None:
             # "move to verse 8" now means verse 8 of what is on screen
             self.detector.set_position(self.live.selection.book, self.live.selection.chapter)
@@ -1288,6 +1360,8 @@ class OperatorWindow(object):
         from .summary import SermonLog
         self._save_sermon()
         self.sermon = SermonLog()
+        if hasattr(self, "possible"):
+            self._reset_quotes()
         if not quiet:
             self._status("Started a new sermon record")
 
@@ -1324,6 +1398,7 @@ class OperatorWindow(object):
                 parent=self.root):
             return
         self._clear_partial()
+        self._reset_quotes()
         self._insert_transcript(lambda t: t.delete("1.0", "end"))
         self._transcript_lines = []
         if self.sermon is not None:
@@ -1521,3 +1596,15 @@ class OperatorWindow(object):
         self.updater.on_close()
         self.output.destroy()
         self.root.destroy()
+
+
+def _strength_bar(strength: float) -> str:
+    """Match strength for the Possible references list: "\u25a0\u25a0\u25a0\u25a0\u25a1 84%"."""
+    filled = max(0, min(5, int(round(strength * 5))))
+    return u"%s%s %d%%" % (u"\u25a0" * filled, u"\u25a1" * (5 - filled), int(round(strength * 100)))
+
+
+def _heard_note(heard: str, limit: int = 60) -> str:
+    if len(heard) > limit:
+        heard = heard[:limit].rsplit(" ", 1)[0] + u" \u2026"
+    return u"Possible reference \u2014 heard \u201c%s\u201d" % heard
