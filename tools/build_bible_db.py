@@ -157,6 +157,10 @@ def main(argv=None) -> int:
         jn = conn.execute("SELECT text FROM verses WHERE translation='KJV' AND book=43 AND chapter=3 AND verse=16"
                           ).fetchone()[0]
         assert jn.startswith("For God so loved the world"), jn
+    from biverse import quotes
+    t0 = time.time()
+    n = quotes.build_index(conn)
+    print("quoted-verse index: %d buckets (%.1fs)" % (n, time.time() - t0))
     conn.execute("VACUUM")
     conn.close()
     os.replace(tmp, args.out)
