@@ -111,7 +111,7 @@ if not any("onnxruntime" in os.path.basename(p) for p, _ in binaries):
 
 hiddenimports = ["_cffi_backend", "vosk.vosk_cffi", "sherpa_onnx", "sherpa_onnx.lib._sherpa_onnx",
                  "certifi", "ssl"]  # certifi + ssl: HTTPS for Settings -> Models downloads
-excludes = ["numpy", "PIL", "matplotlib", "PyQt5", "PySide2", "PySide6", "IPython", "pytest",
+excludes = ["numpy", "matplotlib", "PyQt5", "PySide2", "PySide6", "IPython", "pytest",
             "vosk.transcriber", "websockets"]
 
 # -- Windows version resource ----------------------------------------------------------

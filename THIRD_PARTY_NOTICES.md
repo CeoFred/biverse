@@ -18,6 +18,7 @@ Biverse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following
 | [PortAudio](http://www.portaudio.com/), bundled by sounddevice on Windows and macOS | Audio I/O library | MIT-style PortAudio licence |
 | cffi | Used by vosk and sounddevice | MIT |
 | requests, srt, tqdm | Imported by vosk; not used by Biverse | Apache-2.0 / MIT / MPL-2.0 AND MIT |
+| [Pillow](https://python-pillow.org/) 11.3.0 (10.4.0 in the Windows 7 builds), with its bundled libjpeg-turbo, libpng, libwebp, zlib and FreeType | Idle screen and background pictures (JPEG, PNG, WebP, GIF) | MIT-CMU (HPND); the bundled libraries are under BSD-style, libpng, zlib and FreeType licences |
 | certifi | CA certificates for HTTPS model downloads (Settings → Models) | MPL-2.0 |
 | Python and Tcl/Tk (bundled by PyInstaller) | Runtime and GUI | PSF licence / Tcl/Tk BSD-style licence |
 | PyInstaller bootloader | Packaging | GPL-2.0 with a bootloader exception that allows distributing bundled apps under any licence |
