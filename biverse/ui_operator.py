@@ -259,7 +259,7 @@ class OperatorWindow(object):
         self.follow_btn = ttk.Button(buttons, text=u"\u23f8 Pause", command=self.toggle_following,
                                      style="Small.TButton")
         self.follow_btn.grid(row=2, column=0, sticky="ew", pady=(4, 0), padx=(0, 2))
-        ttk.Button(buttons, text=u"\u270e Emphasis", command=self.open_emphasis, style="Small.TButton").grid(
+        ttk.Button(buttons, text=u"\u270e Mark", command=self.open_emphasis, style="Small.TButton").grid(
             row=2, column=1, sticky="ew", pady=(4, 0), padx=(2, 2))
         self.follow_label = tk.Label(buttons, text="", anchor="w")
         self.follow_label.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(4, 0))

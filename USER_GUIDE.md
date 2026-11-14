@@ -361,7 +361,7 @@ projector switches at once and **stays on that version until it is changed again
 the Bible list). If the version isn't installed (for example "the NIV"), the Status line says so
 and lists the installed ones. Quoting a version ("the King James version says…") does not switch.
 
-**Emphasis: bold, underline or highlight words.** Press **✎ Emphasis** (or Ctrl+E / Cmd+E) while
+**Emphasis: bold, underline or highlight words.** Press **✎ Mark** (or Ctrl+E / Cmd+E) while
 a verse is live or in Preview. Select words in the window that opens and press **Bold**,
 **Underline** or **Highlight**; press again to remove. The projector updates immediately. Marks are
 remembered for that verse in that version, so they come back next time. The highlight colour is in
