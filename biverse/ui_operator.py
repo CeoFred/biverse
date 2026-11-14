@@ -256,9 +256,10 @@ class OperatorWindow(object):
             row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
         ttk.Button(buttons, text="BLACK (Shift+Esc)", command=self.black).grid(
             row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(2, 0))
-        self.follow_btn = ttk.Button(buttons, text=u"\u23f8 Pause (F6)", command=self.toggle_following)
+        self.follow_btn = ttk.Button(buttons, text=u"\u23f8 Pause", command=self.toggle_following,
+                                     style="Small.TButton")
         self.follow_btn.grid(row=2, column=0, sticky="ew", pady=(4, 0), padx=(0, 2))
-        ttk.Button(buttons, text=u"\u270e Emphasis", command=self.open_emphasis).grid(
+        ttk.Button(buttons, text=u"\u270e Emphasis", command=self.open_emphasis, style="Small.TButton").grid(
             row=2, column=1, sticky="ew", pady=(4, 0), padx=(2, 2))
         self.follow_label = tk.Label(buttons, text="", anchor="w")
         self.follow_label.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(4, 0))
@@ -901,7 +902,7 @@ class OperatorWindow(object):
         else:
             text, color = u"\u25cf Following  %d%%" % int(100 * self.follower.progress), self.pal["ok"]
         self.follow_label.configure(text=text, foreground=color)
-        self.follow_btn.configure(text=u"\u23f8 Pause (F6)" if self.following else u"\u25b6 Resume (F6)")
+        self.follow_btn.configure(text=u"\u23f8 Pause" if self.following else u"\u25b6 Resume")
 
     def go_live(self) -> None:
         if self.preview is None:

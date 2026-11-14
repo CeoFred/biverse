@@ -108,6 +108,7 @@ def apply(root, mode: str) -> Dict[str, str]:
     style.map("TButton", background=[("pressed", p["border"]), ("active", p["button_hover"])],
               lightcolor=[("active", p["button_hover"])], darkcolor=[("active", p["button_hover"])],
               foreground=[("disabled", p["muted"])])
+    style.configure("Small.TButton", padding=(2, 5))
     style.configure("Accent.TButton", background=p["accent"], foreground=p["accent_text"], bordercolor=p["accent"],
                     lightcolor=p["accent"], darkcolor=p["accent"], font=(fam, size, "bold"), padding=(14, 7))
     style.map("Accent.TButton", background=[("pressed", p["accent_hover"]), ("active", p["accent_hover"])],

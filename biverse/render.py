@@ -292,6 +292,9 @@ class Renderer(object):
             return int(round(v * scale))
 
         text_size = max(4, s(lay.text_size))
+        if design_size is not None and scale < 0.5:
+            # tiny fonts render slightly taller than their nominal size: keep thumbnails inside the frame
+            text_size = max(4, int(text_size * 0.9))
         ref_size = max(4, s(lay.ref_size))
         box_w = s(lay.box[2] - lay.box[0])
         cx = width // 2
