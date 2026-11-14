@@ -2,7 +2,8 @@
 
 Biverse listens to the preacher. When it hears a Bible reference ("John chapter three verse
 sixteen"), it puts the verse on the projector or TV. It is free, needs no internet and sends
-nothing anywhere.
+nothing anywhere. It only goes online if you press **Download** for an optional model in
+Settings → Models.
 
 This guide is written for church volunteers. You do not need to be technical.
 
@@ -283,7 +284,10 @@ Open **⚙ Settings**.
 - **Appearance:** background and text colours, font, bold, text shadow, reference line at the
   bottom or top, and a background image (PNG or GIF, ideally the projector's size). You can
   also choose to show a short verse range on one slide when it fits.
+- **Appearance** also has "Open the operator window full screen" (on by default). F11 (on a
+  Mac, Ctrl+Cmd+F) or **View → Full screen** switches it at any time.
 - **Speech:** which speech model to use (see below).
+- **Models:** download and install speech models and the AI summary (see below).
 - **Detection:** strict book names, relative verses, how long to ignore repeats (60 seconds
   by default), and the Auto-mode safety option.
 - **Extra reference listener** (Detection tab; only used by the classic model): a second
@@ -298,25 +302,34 @@ time.
 
 ## 9. Speech models: getting the best recognition
 
-Biverse can use three speech models. **Settings → Speech** shows which one is in use.
+Biverse can use three speech models. **Settings → Speech** shows which one is in use, and
+**Settings → Models** downloads the ones you don't have.
 
 | Model | Best for | Needs |
 |---|---|---|
 | **Kroko** (built in) | Every computer. Words appear live as the preacher speaks. | Any computer |
 | **Kroko + Parakeet** (with the pack) | The most detections: Kroko reacts live, Parakeet re-checks each phrase at the pause. Chosen automatically when the computer can run it. | About 2 GB of free RAM |
 | **Parakeet** (free model pack) | The most accurate, by far the best with African and other accents. The verse appears a moment after the preacher pauses. | A 64-bit computer with about 6 GB of RAM or more |
-| **Classic** (Vosk, Windows 7/8 downloads only) | Old Windows 7 computers where Kroko cannot run | Any computer |
+| **Classic** (Vosk; built into the Windows 7/8 downloads, downloadable elsewhere) | Old Windows 7 computers where Kroko cannot run | Any computer |
 
 In tests with Nigerian English speakers, Parakeet got about 1 word in 14 wrong; Kroko about
 1 in 5; the classic model about 1 in 3.
 
-**Installing the Parakeet pack (recommended if your computer can run it):**
+**Getting Parakeet (recommended if your computer can run it):**
 
-1. On any computer with internet, download `Biverse-model-pack-parakeet-….zip` (about 500 MB)
-   from the same Releases page as Biverse. Copy it to the church computer if needed.
-2. In Biverse, open **Settings → Speech → Install model pack…** and choose the zip.
-3. Wait for "installed" (about a minute). With the model set to **Automatic**, Biverse now uses
-   Parakeet whenever the computer can run it, and falls back to Kroko otherwise.
+1. Open **Settings → Models** and press **Download** next to Parakeet (about 480 MB).
+2. A progress bar shows how much is done, the speed and the time left. You can close Settings
+   and keep working; the status line at the bottom keeps showing the progress. **Cancel** stops
+   it, and pressing **Download** again continues where it stopped.
+3. When it says **installed**, Biverse checks the download and switches to it straight away
+   (with the model set to **Automatic**, or after asking if you chose another model). If you are
+   listening at that moment, it switches when you press Stop.
+
+Models tab buttons say **Not available** (with the reason) when this computer can't run a model.
+
+**No internet on the church computer?** On any computer with internet, download
+`Biverse-model-pack-parakeet-….zip` (about 500 MB) from the Releases page, copy it over, then use
+**Settings → Models → Install from a file…** and choose the zip.
 
 The pack is kept in your settings folder, so it survives Biverse updates. To force a particular
 model, choose it in Settings → Speech.
@@ -377,8 +390,9 @@ came up. Open **Service → Sermon summary** (Ctrl+Shift+S) during or after the 
 Each service is saved automatically (Service → Open a previous sermon…). A new record starts when
 you press Listen after a 30-minute break, or with Service → Start a new sermon.
 
-**AI-written summary (optional).** Download `Biverse-ai-summary-pack-….zip` (about 1.2 GB) from the
-Releases page and install it with Settings → Speech → **Install model pack…**. The summary window
+**AI-written summary (optional).** Press **Download** next to AI sermon summary in Settings → Models
+(about 1.1 GB), or install `Biverse-ai-summary-pack-….zip` (about 1.2 GB, from the Releases page) with
+Settings → Models → **Install from a file…**. The summary window
 then offers **Write AI summary**: a short prose summary written on this computer (nothing is sent
 anywhere) in under a minute. It needs about 8 GB of RAM and one of these:
 
@@ -387,8 +401,8 @@ anywhere) in under a minute. It needs about 8 GB of RAM and one of these:
 - Linux on a 64-bit Intel/AMD computer (running from source)
 
 It does **not** work on Windows 7 or 8, on the 32-bit (`windows-legacy-x86`) download, or on ARM
-Windows/Linux. On those computers the summary window explains why, and Biverse won't install the
-pack, so you don't waste the 1.2 GB download. The built-in summary works on every computer.
+Windows/Linux. On those computers Settings → Models and the summary window explain why, and
+Biverse won't download or install it, so you don't waste the download. The built-in summary works on every computer.
 
 **The look of the window** follows your computer's light or dark setting. Choose Dark or Light
 permanently in Settings → Appearance → "Operator window look".
