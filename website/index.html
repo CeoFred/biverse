@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en" data-version="1.3.0">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Biverse</title>
+<meta name="description" content="Free, offline Bible-verse projection driven by live speech. Biverse hears the preacher say a reference and puts the verse on the projector. No internet, no account.">
+<meta name="theme-color" content="#0B1638">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Biverse: say the verse, see it on the screen">
+<meta property="og:description" content="Free, offline Bible-verse projection driven by live speech. For Windows and macOS.">
+<meta property="og:image" content="/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="brand" href="/" aria-label="Biverse home">
+      <img src="/assets/logo.svg" alt="" width="36" height="36">
+      <span>Biverse</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#ai-summary">AI summary</a>
+      <a href="https://github.com/CeoFred/biverse/blob/main/USER_GUIDE.md">Guide</a>
+      <a class="btn btn-small" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Free · Offline · Windows &amp; macOS</p>
+      <h1>The preacher says the verse.<br><span>Biverse puts it on the screen.</span></h1>
+      <p class="lede">Biverse listens to the sermon, recognises Bible references as they are spoken and
+        shows the verse full-screen on your projector or TV. It runs entirely on the church computer: no
+        internet, no account, no subscription.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="primary-download" href="#download" data-file="">Download Biverse</a>
+        <a class="btn btn-ghost" href="https://github.com/CeoFred/biverse">View on GitHub</a>
+      </div>
+      <p class="cta-note" id="cta-note">Version <span class="ver">1.3.0</span> · MIT licence · Windows 7 to 11, macOS 10.15+</p>
+    </div>
+
+    <figure class="demo" aria-label="Example: a spoken reference becomes a projected verse">
+      <div class="mic-line">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="mic-label">Listening</span>
+        <span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      </div>
+      <p class="transcript" id="demo-transcript" data-swap>“…so this morning, turn with me to <mark>John chapter three verse sixteen</mark>…”</p>
+      <div class="detect" aria-hidden="true">
+        <span class="arrow"></span>
+        <span class="chip" id="demo-chip" data-swap>John 3:16 · KJV</span>
+        <span class="chip chip-live">Live</span>
+      </div>
+      <div class="screen">
+        <div class="screen-inner">
+          <blockquote id="demo-verse" data-swap>For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life.</blockquote>
+          <p class="screen-ref" id="demo-ref" data-swap>John 3:16 <span>KJV</span></p>
+        </div>
+      </div>
+      <figcaption>What the congregation sees, a moment after the reference is spoken.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="facts" aria-label="At a glance">
+  <div class="wrap facts-row">
+    <div><strong>0</strong><span>internet connections</span></div>
+    <div><strong>5</strong><span>public-domain translations</span></div>
+    <div><strong>$0</strong><span>open source, MIT licence</span></div>
+    <div><strong>1024×600</strong><span>smallest screen it fits</span></div>
+  </div>
+</section>
+
+<section id="how" class="section">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li>
+        <h3>Listen</h3>
+        <p>Connect any sound source: the laptop microphone, a USB mic, or a feed from the sound desk. A live
+          meter shows Biverse can hear.</p>
+      </li>
+      <li>
+        <h3>Recognise</h3>
+        <p>Offline speech recognition picks out references like “second Timothy three sixteen” or
+          “Psalm one nineteen, verse one hundred and five”. Words such as <em>mark</em>, <em>job</em> and <em>acts</em> are not mistaken for books.</p>
+      </li>
+      <li>
+        <h3>Project</h3>
+        <p>In Manual mode the verse waits in Preview until you press Go Live. In Auto mode it goes straight
+          to the screen. Biverse follows the reading and moves to the next verse as the preacher finishes each one.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="section shots" aria-label="Screenshots">
+  <div class="wrap shots-grid">
+    <figure class="shot shot-main">
+      <img src="/assets/screens/operator-1920x1080.webp" width="1600" height="900" loading="lazy"
+           alt="The Biverse operator window with Preview and Live panels, the transcript and search.">
+      <figcaption>The operator window: Preview, Live, the running transcript and search.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="/assets/screens/output-1920x1080.webp" width="1600" height="900" loading="lazy"
+           alt="A verse shown full-screen on the projector output.">
+      <figcaption>The projector output, auto-fitted to any screen.</figcaption>
+    </figure>
+    <figure class="shot">
+      <img src="/assets/screens/operator-1024x600.webp" width="1024" height="600" loading="lazy"
+           alt="The operator window on a small 1024 by 600 netbook screen.">
+      <figcaption>Still usable on a 1024×600 netbook.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="features" class="section">
+  <div class="wrap">
+    <h2>Built for the media desk</h2>
+    <dl class="features">
+      <div><dt>Any audio input</dt><dd>Built-in or USB microphones, audio interfaces, mixer line-in, Stereo Mix, VB-Cable or BlackHole.</dd></div>
+      <div><dt>Accurate with real accents</dt><dd>Kroko is built in for live recognition. The free Parakeet pack is far better with African and other accents.</dd></div>
+      <div><dt>Voice navigation</dt><dd>“Next verse”, “stop there”, “continue”, and “let’s read this in the ASV” all work hands-free.</dd></div>
+      <div><dt>Fast search</dt><dd>Type <code>jn 3:16</code>, <code>1 cor 13 4-7</code> or a phrase like <code>for god so loved</code>.</dd></div>
+      <div><dt>Emphasis</dt><dd>Bold, underline or highlight words of a verse while it is on the projector.</dd></div>
+      <div><dt>Sermon summary</dt><dd>Every service gets a record: the scriptures read, key points and a timeline. You can save it or copy it.</dd></div>
+      <div><dt>Your translations</dt><dd>KJV, WEB, ASV, YLT and BBE are included. You can import a translation your church is licensed for.</dd></div>
+      <div><dt>A clean output screen</dt><dd>Borderless on any monitor, with fonts, colours, a shadow, a background image, and Blank and Black.</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section id="download" class="section download">
+  <div class="wrap">
+    <h2>Download</h2>
+    <p class="section-lede">Choose the zip for your computer, unzip it and run Biverse. The
+      <a href="https://github.com/CeoFred/biverse/blob/main/USER_GUIDE.md#1-installing">installation guide</a>
+      walks volunteers through it step by step.</p>
+    <div class="table-scroll">
+      <table class="dl-table">
+        <thead><tr><th scope="col">Computer</th><th scope="col">File</th><th scope="col"><span class="sr">Download</span></th></tr></thead>
+        <tbody>
+          <tr data-os="windows"><td>Windows 10 or 11, 64-bit</td><td><code>windows-x64</code></td><td><a class="btn btn-small" data-file="windows-x64" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+          <tr data-os="windows-legacy"><td>Windows 7 SP1, 8 or 8.1, 64-bit</td><td><code>windows-legacy-x64</code></td><td><a class="btn btn-small" data-file="windows-legacy-x64" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+          <tr><td>Windows 7 or later, 32-bit</td><td><code>windows-legacy-x86</code></td><td><a class="btn btn-small" data-file="windows-legacy-x86" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+          <tr data-os="mac-arm"><td>Mac with Apple Silicon, macOS 11+</td><td><code>macos-arm</code></td><td><a class="btn btn-small" data-file="macos-arm" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+          <tr data-os="mac-intel"><td>Intel Mac, macOS 10.15+</td><td><code>macos-intel</code></td><td><a class="btn btn-small" data-file="macos-intel" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="sub">Optional packs</h3>
+    <div class="table-scroll">
+      <table class="dl-table">
+        <thead><tr><th scope="col">Pack</th><th scope="col">Needs</th><th scope="col"><span class="sr">Download</span></th></tr></thead>
+        <tbody>
+          <tr><td><strong>Parakeet speech model</strong><br><span class="muted">The most accurate recognition, best with accents</span></td><td>64-bit, about 6 GB RAM</td><td><a class="btn btn-small btn-quiet" data-pack="model-pack-parakeet" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+          <tr><td><strong>AI sermon summary</strong><br><span class="muted">About 1.2 GB, see which computers below</span></td><td>64-bit, about 8 GB RAM</td><td><a class="btn btn-small btn-quiet" data-pack="ai-summary-pack" href="https://github.com/CeoFred/biverse/releases/latest">Download</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine">Install packs in Biverse with Settings → Speech → Install model pack…. Checksums are in
+      <code>SHA256SUMS.txt</code> on the <a href="https://github.com/CeoFred/biverse/releases/latest">release page</a>.
+      On a Mac, right-click Biverse.app and choose Open the first time.</p>
+  </div>
+</section>
+
+<section id="ai-summary" class="section">
+  <div class="wrap ai-grid">
+    <div>
+      <h2>AI sermon summary</h2>
+      <p>The built-in summary works on every computer. It lists the scriptures, picks the key sentences and
+        builds a timeline. The optional AI pack goes further and writes a short summary in plain prose. It runs on
+        the church computer and nothing is sent anywhere.</p>
+      <p>The AI pack is <strong>not included in the app download</strong>. Download it separately, and only for
+        computers that can run it. Biverse checks the computer, and if it can’t run the AI summary it says why
+        instead of installing the pack.</p>
+    </div>
+    <div class="table-scroll">
+      <table class="ai-table">
+        <caption class="sr">Which downloads can run the AI summary</caption>
+        <thead><tr><th scope="col">Download</th><th scope="col">AI summary with the pack</th></tr></thead>
+        <tbody>
+          <tr><td><code>windows-x64</code></td><td><span class="ok">Yes</span> Windows 10 and 11</td></tr>
+          <tr><td><code>windows-legacy-x64</code></td><td><span class="part">Windows 10 and 11 only</span> not on Windows 7 or 8</td></tr>
+          <tr><td><code>windows-legacy-x86</code></td><td><span class="no">No</span> 32-bit</td></tr>
+          <tr><td><code>macos-arm</code></td><td><span class="ok">Yes</span> macOS 13.3+ recommended</td></tr>
+          <tr><td><code>macos-intel</code></td><td><span class="ok">Yes</span> macOS 13.3+ recommended</td></tr>
+          <tr><td>Linux x64, from source</td><td><span class="ok">Yes</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="section faq">
+  <div class="wrap">
+    <h2>Questions</h2>
+    <details>
+      <summary>Does Biverse need the internet?</summary>
+      <p>No. Speech recognition, the Bible texts and the AI summary all run on the computer. Biverse never
+        connects to the internet, and there is no account and no telemetry.</p>
+    </details>
+    <details>
+      <summary>Will it run on our old church laptop?</summary>
+      <p>Most likely. There are builds for Windows 7 SP1 and later, including 32-bit netbooks, and for Macs from
+        macOS 10.15. The window fits a 1024×600 screen. Windows 7 needs update KB2999226.</p>
+    </details>
+    <details>
+      <summary>Can we use the NIV, NKJV or ESV?</summary>
+      <p>These translations are copyrighted, so they can’t be included. If your church holds a licence, import the
+        text with <code>--import-translation</code>. The
+        <a href="https://github.com/CeoFred/biverse/blob/main/USER_GUIDE.md#10-adding-a-licensed-translation">guide</a> explains how.</p>
+    </details>
+    <details>
+      <summary>What if it shows the wrong verse?</summary>
+      <p>Use Manual mode. Detected verses wait in Preview, and nothing reaches the screen until you press Go Live.</p>
+    </details>
+    <details>
+      <summary>Is it really free?</summary>
+      <p>Yes. Biverse is open source under the MIT licence. The included Bible texts are public domain.</p>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-row">
+    <div class="brand brand-footer"><img src="/assets/logo.svg" alt="" width="28" height="28"><span>Biverse</span></div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/CeoFred/biverse">GitHub</a>
+      <a href="https://github.com/CeoFred/biverse/blob/main/USER_GUIDE.md">User guide</a>
+      <a href="https://github.com/CeoFred/biverse/releases">All releases</a>
+      <a href="https://github.com/CeoFred/biverse/blob/main/LICENSE">MIT licence</a>
+    </nav>
+    <p class="muted">This site sets no cookies and uses no analytics.</p>
+  </div>
+</footer>
+
+<script src="/site.js" defer></script>
+</body>
+</html>
