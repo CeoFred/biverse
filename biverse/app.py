@@ -120,9 +120,31 @@ def run_gui(args) -> int:
     op = OperatorWindow(root, settings, bible)
     if args.screenshot:
         root.after(int(args.screenshot_delay * 1000), lambda: _screenshot_and_quit(op, args.screenshot))
-    root.mainloop()
+    _close_on_interrupt(root, op)
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        # Ctrl+C that slipped past the handler: still stop the recogniser thread (it is
+        # inside onnxruntime) and save the sermon/settings before the interpreter exits.
+        op.close()
     bible.close()
     return 0
+
+
+def _close_on_interrupt(root, op) -> None:
+    """Ctrl+C in the terminal closes the window cleanly (same path as the close button)."""
+    import signal
+
+    try:
+        signal.signal(signal.SIGINT, lambda *_: root.after(0, op.close))
+    except ValueError:  # not the main thread
+        return
+
+    def tick():  # Python signal handlers only run when Python code runs; Tk's loop is C
+        if not op._closing:
+            root.after(250, tick)
+
+    root.after(250, tick)
 
 
 def _screenshot_and_quit(op, path):  # pragma: no cover - docs tooling under Xvfb (ImageMagick)
