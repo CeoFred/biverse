@@ -1,3 +1,5 @@
+<p><img src="website/assets/logo.svg" alt="Biverse logo" width="96" height="96"></p>
+
 # Biverse
 
 **Free, offline Bible-verse projection driven by live speech.** Biverse listens to the
@@ -117,6 +119,12 @@ This produces `dist/Biverse/` on Windows and `dist/Biverse.app` on macOS. CI bui
 targets (see `.github/workflows/build.yml`). Pushing a `v*` tag creates a GitHub Release with
 the zips and checksums.
 
+## Website
+
+`website/` is the static project site (no build step), ready for Vercel: import the repo and set
+**Root Directory** to `website`. See [website/README.md](website/README.md). Keep its
+`data-version` in step with `biverse.__version__` (a test checks this).
+
 ## Architecture
 
 ```
@@ -153,7 +161,7 @@ loading, opening an audio device and recognition all happen off the UI thread.
 | `biverse/controller.py` | Preview/Live selection state and stepping |
 | `biverse/ui_operator.py`, `ui_output.py`, `ui_settings.py` | Tk windows |
 | `biverse/settings.py`, `paths.py` | JSON settings, resource and config locations |
-| `tools/` | DB builder, model fetcher, translation importer, icons, screenshots |
+| `tools/` | DB builder, model fetcher, translation importer, icons and website assets, screenshots |
 
 Runtime dependencies are only `sherpa-onnx`, `vosk==0.3.44`, `sounddevice` and the standard library (no numpy). See
 [DECISIONS.md](DECISIONS.md) for design choices and
