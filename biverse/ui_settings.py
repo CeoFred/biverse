@@ -6,7 +6,7 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
-from . import downloads, recognizer
+from . import APP_NAME, __version__, downloads, recognizer
 
 
 class SettingsDialog(object):
@@ -177,6 +177,8 @@ class SettingsDialog(object):
                            "chapter and a verse.", style="Muted.TLabel", wraplength=420).grid(
             row=5, column=0, columnspan=2, sticky="w")
 
+        self._build_updates(nb, s)
+
         if tab == "models":
             nb.select(md)
         elif tab == "bibles":
@@ -191,6 +193,31 @@ class SettingsDialog(object):
         self.win.bind("<Escape>", lambda e: (self._ok(), "break")[1])
         self.win.grab_set()
         self._tick()
+
+    # -- updates ------------------------------------------------------------------------
+    def _build_updates(self, nb, s) -> None:
+        from . import updates
+        up = ttk.Frame(nb, padding=10)
+        nb.add(up, text="Updates")
+        self.update_check = tk.BooleanVar(value=s["update_check"])
+        ttk.Label(up, text="This is %s %s." % (APP_NAME, __version__)).grid(row=0, column=0, sticky="w")
+        ttk.Checkbutton(up, text="Check for new versions by myself (about twice a day, never while listening)",
+                        variable=self.update_check).grid(row=1, column=0, sticky="w", pady=(8, 2))
+        note = ("Biverse asks before it downloads anything, and installs only when you restart it. A check "
+                "sends nothing about you or your church; it reads one small file from GitHub.")
+        problem = updates.install_problem() if updates.flavour() else ""
+        if not updates.flavour():
+            note += "\n\nThis copy is not a downloaded release, so it is never offered updates."
+        elif problem:
+            note += "\n\nThis copy cannot replace itself (%s). Updates will be offered as a zip to unpack." % problem
+        ttk.Label(up, text=note, style="Muted.TLabel", wraplength=440, justify="left").grid(
+            row=2, column=0, sticky="w")
+        ttk.Button(up, text="Check now", command=self._check_updates).grid(row=3, column=0, sticky="w", pady=(10, 0))
+
+    def _check_updates(self) -> None:
+        self.apply()
+        self._ok()
+        self.op.updater.check(manual=True)
 
     # -- online Bibles ----------------------------------------------------------------
     def _build_bibles(self, nb, s) -> None:
@@ -385,6 +412,7 @@ class SettingsDialog(object):
         s["reference_recognizer"] = bool(self.ref_rec.get())
         s["voice_commands"] = bool(self.voice_cmds.get())
         s["follow_reading"] = bool(self.follow.get())
+        s["update_check"] = bool(self.update_check.get())
         self._apply_bibles()
         model_changed = (self.model_path.get().strip() != s["model_path"]
                          or self.speech_model.get() != s["speech_model"])

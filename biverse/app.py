@@ -163,6 +163,8 @@ def self_test(report_path: str = "") -> int:
     report = {"app": APP_NAME, "version": __version__, "python": sys.version.split()[0],
               "platform": platform.platform(), "machine": platform.machine(),
               "frozen": paths.is_frozen(), "checks": {}}
+    from .updates import build_info
+    report["build"] = build_info()
     ok = True
 
     def check(name, fn, critical=True):
@@ -290,6 +292,9 @@ def main(argv=None) -> int:
     ap.add_argument("--report", default="", help="also write the self-test JSON to this file")
     ap.add_argument("--import-translation", nargs=3, metavar=("CODE", "NAME", "FILE"),
                     help="import a CSV/JSON translation you hold a licence for, then exit")
+    ap.add_argument("--apply-update", default="", metavar="APP", help=argparse.SUPPRESS)
+    ap.add_argument("--wait-pid", type=int, default=0, help=argparse.SUPPRESS)
+    ap.add_argument("--relaunch", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--screenshot", default="", help=argparse.SUPPRESS)
     ap.add_argument("--screenshot-delay", type=float, default=3.0, help=argparse.SUPPRESS)
     # macOS passes -psn_... when launched from Finder on old systems
@@ -299,6 +304,9 @@ def main(argv=None) -> int:
     log.info("%s %s starting (python %s, %s)", APP_NAME, __version__, sys.version.split()[0], platform.platform())
     if args.self_test:
         return self_test(args.report)
+    if args.apply_update:
+        from .updates import apply_update
+        return apply_update(args.apply_update, args.wait_pid, args.relaunch)
     if args.import_translation:
         from .import_cli import run_import
         return run_import(list(args.import_translation))

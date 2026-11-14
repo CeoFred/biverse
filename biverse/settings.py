@@ -50,6 +50,10 @@ DEFAULTS = {
     "youversion_key": "",
     "online_languages": "en",       # language tags, comma separated ("en, fr, yo")
     "offline_fallback": "KJV",      # shown when an online version cannot be reached
+    # in-app updates (biverse/updates.py): checked at most twice a day, never while listening
+    "update_check": True,
+    "update_skipped": "",           # "Skip this version": not offered again until a newer one
+    "update_last_check": 0.0,       # time.time() of the last automatic check
 }  # type: Dict[str, Any]
 
 
