@@ -380,8 +380,15 @@ you press Listen after a 30-minute break, or with Service → Start a new sermon
 **AI-written summary (optional).** Download `Biverse-ai-summary-pack-….zip` (about 1.2 GB) from the
 Releases page and install it with Settings → Speech → **Install model pack…**. The summary window
 then offers **Write AI summary**: a short prose summary written on this computer (nothing is sent
-anywhere) in under a minute. It needs a 64-bit computer with about 8 GB of RAM; Windows 7/8 and
-32-bit computers can't run it.
+anywhere) in under a minute. It needs about 8 GB of RAM and one of these:
+
+- Windows 10 or 11, 64-bit (the `windows-x64` or `windows-legacy-x64` download)
+- A Mac with Apple Silicon or Intel (macOS 13.3 or later recommended)
+- Linux on a 64-bit Intel/AMD computer (running from source)
+
+It does **not** work on Windows 7 or 8, on the 32-bit (`windows-legacy-x86`) download, or on ARM
+Windows/Linux. On those computers the summary window explains why, and Biverse won't install the
+pack, so you don't waste the 1.2 GB download. The built-in summary works on every computer.
 
 **The look of the window** follows your computer's light or dark setting. Choose Dark or Light
 permanently in Settings → Appearance → "Operator window look".

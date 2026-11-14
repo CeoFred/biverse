@@ -153,6 +153,12 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   and Linux x64. The model only sees the extractive key points and scriptures (small prompt,
   fast, grounded), and is told not to add verses.
 
+  Biverse checks the platform before offering it (`llm.unsupported_reason`): 32-bit builds,
+  Windows before 10 (llama.cpp's release builds need it) and platforms without a binary
+  (ARM Windows/Linux) get a clear reason, and the pack installer refuses the pack there. macOS
+  below 13.3 (the deployment target of llama.cpp's macOS releases) gets a warning only, since
+  this is not verified.
+
   It was **not run locally**: executing the downloaded binary was blocked by the session's
   permission policy. A CI job (`ai-summary`) runs the real model on Linux, and a stand-in
   program tests the integration on every platform.

@@ -27,8 +27,8 @@ computer. There is no internet connection, account, cloud service or telemetry.
 - Voice navigation and **following the reading**: Biverse moves to the next verse as the preacher
   finishes each one; "stop there" / "continue"; "let's read this in the ASV" switches version.
 - **Emphasis**: bold, underline or highlight words of a verse on the projector.
-- **Sermon summary**: scriptures, key points and timeline built in; an optional offline AI pack
-  writes a prose summary.
+- **Sermon summary**: scriptures, key points and timeline are built in on every build. An
+  optional offline AI pack writes a prose summary (see [AI summary](#ai-summary-optional)).
 - Modern light/dark interface that follows the computer's setting.
 - Translations: **KJV, WEB, ASV, YLT and BBE** (all public domain). You can switch at any
   time, and you can import a translation your church is licensed for.
@@ -52,7 +52,30 @@ Get the zip for your computer from the
 | `Biverse-model-pack-parakeet-<version>.zip` | Optional high-accuracy speech model (64-bit, ~6 GB RAM) |
 | `Biverse-ai-summary-pack-<version>.zip` | Optional offline AI sermon summary (64-bit, ~8 GB RAM) |
 
-`SHA256SUMS.txt` lists the checksums. The [User Guide](USER_GUIDE.md) covers installation,
+`SHA256SUMS.txt` lists the checksums.
+
+### AI summary (optional)
+
+The AI summary is **not included in any app download**. Install `Biverse-ai-summary-pack-<version>.zip`
+(about 1.2 GB) with Settings → Speech → **Install model pack…**. The pack contains the
+Qwen2.5 1.5B model and the llama.cpp program for four platforms, so it only works on these:
+
+| Build | AI summary with the pack |
+|---|---|
+| `windows-x64` | Yes (Windows 10/11) |
+| `windows-legacy-x64` | Only on Windows 10/11. Not on Windows 7/8 |
+| `windows-legacy-x86` | No (32-bit) |
+| `macos-arm` | Yes (macOS 13.3+ recommended) |
+| `macos-intel` | Yes (macOS 13.3+ recommended) |
+| From source, Linux x64 | Yes |
+| From source, Linux or Windows on ARM | No |
+
+It also needs about 8 GB of RAM. On computers that can't run it, the summary window says why
+and Biverse refuses to install the pack. The built-in summary (scriptures, key points,
+timeline) works everywhere and needs no pack.
+
+The real model is tested in CI on Linux x64 only. On macOS and Windows a stand-in program
+tests the integration. The [User Guide](USER_GUIDE.md) covers installation,
 connecting the projector, audio sources and troubleshooting, for non-technical volunteers.
 
 ## Build from source

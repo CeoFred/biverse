@@ -16,6 +16,7 @@ import logging
 import os
 import platform
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -36,6 +37,37 @@ def platform_key() -> str:
     if sys.platform == "win32":
         return "win-" + arch
     return "linux-" + arch
+
+
+# Platforms the AI pack ships a llama.cpp program for (tools/fetch_model.py).
+SUPPORTED = ("macos-arm64", "macos-x64", "win-x64", "linux-x64")
+MACOS_MIN = (13, 3)  # deployment target of llama.cpp's macOS release builds
+
+
+def unsupported_reason() -> str:
+    """Why this computer cannot run the AI summary, or "" if it can."""
+    if struct.calcsize("P") * 8 < 64:
+        return "The AI summary needs the 64-bit version of Biverse on a 64-bit computer."
+    if sys.platform == "win32":
+        try:
+            major = sys.getwindowsversion().major  # type: ignore[attr-defined]
+        except AttributeError:
+            major = 10
+        if major < 10:
+            return "The AI summary needs Windows 10 or later."
+    key = platform_key()
+    if key not in SUPPORTED:
+        return "The AI summary is not available for this computer (%s)." % key
+    return ""
+
+
+def platform_warning() -> str:
+    """A caution for computers that may be too old, or "" (the summary is still offered)."""
+    if sys.platform == "darwin":
+        ver = tuple(int(p) for p in (platform.mac_ver()[0] or "0").split(".")[:2] if p.isdigit())
+        if ver and ver < MACOS_MIN:
+            return "may not run before macOS %d.%d" % MACOS_MIN
+    return ""
 
 
 class AIPack(object):
@@ -149,6 +181,11 @@ def summarise_ai(pack: AIPack, summary: dict) -> str:
 
 
 def describe(pack: Optional[AIPack]) -> Tuple[bool, str]:
+    """(can run, note for the summary window)."""
+    reason = unsupported_reason()
+    if reason:
+        return False, reason
     if pack is None:
         return False, "Install the AI summary pack (Settings → Speech → Install model pack…)"
-    return True, pack.label
+    warning = platform_warning()
+    return True, pack.label + (" (%s)" % warning if warning else "")

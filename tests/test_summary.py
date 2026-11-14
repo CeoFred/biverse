@@ -128,3 +128,48 @@ def test_prompt_is_grounded():
     p = llm.build_prompt(["John 3:16"], ["God loves the world."], ["love"])
     assert "John 3:16" in p and "God loves the world." in p and "Do not add Bible verses" in p
     assert p.endswith("<|im_start|>assistant\n")
+
+
+# -- which computers can run it ----------------------------------------------------------
+
+def test_unsupported_platform_is_explained(monkeypatch):
+    monkeypatch.setattr(llm, "platform_key", lambda: "linux-arm64")
+    ok, note = llm.describe(None)
+    assert not ok and "not available for this computer" in note and "Install" not in note
+
+
+def test_32_bit_is_explained(monkeypatch):
+    import struct as _struct
+    real = _struct.calcsize
+    monkeypatch.setattr(llm.struct, "calcsize", lambda f: 4 if f == "P" else real(f))
+    ok, note = llm.describe(None)
+    assert not ok and "64-bit" in note
+
+
+def test_old_windows_is_explained(monkeypatch):
+    class V(object):
+        major = 6
+    monkeypatch.setattr(llm.sys, "platform", "win32")
+    monkeypatch.setattr(llm.sys, "getwindowsversion", lambda: V(), raising=False)
+    monkeypatch.setattr(llm, "platform_key", lambda: "win-x64")
+    assert "Windows 10" in llm.unsupported_reason()
+
+
+def test_supported_without_pack_asks_to_install(monkeypatch):
+    monkeypatch.setattr(llm, "unsupported_reason", lambda: "")
+    ok, note = llm.describe(None)
+    assert not ok and "Install the AI summary pack" in note
+
+
+def test_pack_without_this_platform_is_refused(tmp_path, monkeypatch):
+    import zipfile
+    from biverse import modelpack
+    monkeypatch.setattr(llm, "unsupported_reason", lambda: "")
+    monkeypatch.setattr(llm, "platform_key", lambda: "win-x64")
+    z = tmp_path / "pack.zip"
+    with zipfile.ZipFile(str(z), "w") as zf:
+        zf.writestr("ai/biverse-model.json", json.dumps(
+            {"engine": "llm", "model": "m.gguf", "bin": {"linux-x64": "bin/linux-x64/llama-completion"}}))
+        zf.writestr("ai/m.gguf", "GGUF")
+    with pytest.raises(modelpack.PackError, match="no program for this computer"):
+        modelpack.inspect(str(z))
