@@ -64,6 +64,10 @@ class OperatorWindow(object):
         self._partials_seen = False
         self._passage_start = None  # (book, chapter, verse) of the passage last sent live
         self.following = True       # follow-the-reading on/off ("stop there" / "continue")
+        self.settings_dialog = None  # the open SettingsDialog, if any
+        self._reload_after_listening = False
+        from .downloads import DownloadManager
+        self.downloads = DownloadManager(on_finish=lambda job: self.events.put(("download", job)))
 
         if not bible.has_translation(settings["translation"]):
             settings["translation"] = bible.default_translation()
@@ -522,6 +526,9 @@ class OperatorWindow(object):
         self.audio_retry_at = 0.0
         self._clear_partial()
         self._update_listen_ui()
+        if self._reload_after_listening:
+            self._reload_after_listening = False
+            self.reload_model()
 
     def _update_listen_ui(self) -> None:
         if self.listening:
@@ -580,6 +587,8 @@ class OperatorWindow(object):
             if self._tick % 20 == 0:
                 self._audio_watchdog()
                 self._prune_transcript()
+            if self._tick % 20 == 10 and not self.listening:
+                self._download_status()
             if self._tick % 100 == 50 and self.settings["ui_theme"] == "system":
                 self._check_theme()
             if self._tick % 100 == 0 and self._displays_changed():
@@ -604,6 +613,8 @@ class OperatorWindow(object):
             self._on_detection(ev[1], ev[2])
         elif kind == "model":
             self._on_model(ev[1], ev[2])
+        elif kind == "download":
+            self._on_download(ev[1])
         elif kind == "pack":
             self._on_pack(ev[1], ev[2])
         elif kind == "command":
@@ -617,11 +628,11 @@ class OperatorWindow(object):
         if state == "missing":
             self._set_banner(
                 "No speech model could be used (%s), so listening is off. Manual search and projection still "
-                "work.\nTo fix: re-extract the %s download, or use Settings \u2192 Speech to choose or install a "
-                "model (see the User Guide)." % (detail, APP_NAME))
+                "work.\nTo fix: re-extract the %s download, or download a model in Settings \u2192 Models "
+                "(see the User Guide)." % (detail, APP_NAME))
         elif state == "error":
             self._set_banner("The speech model could not be loaded: %s\nChoose another model in "
-                             "Settings \u2192 Speech." % detail)
+                             "Settings \u2192 Speech, or download one in Settings \u2192 Models." % detail)
         else:
             self._set_banner("")
         if state == "ready":
@@ -654,6 +665,49 @@ class OperatorWindow(object):
             self._status("Model pack not installed", error=True)
             messagebox.showerror(APP_NAME, "The model pack could not be installed:\n\n%s" % detail,
                                  parent=self.root)
+
+    # -- model downloads (Settings -> Models) -------------------------------------
+    def _download_status(self) -> None:
+        jobs = self.downloads.running()
+        if jobs:
+            j = jobs[0]
+            self._status("%s: %s" % (j.item.label, j.describe()))
+
+    def _on_download(self, job) -> None:
+        if self.settings_dialog is not None:
+            self.settings_dialog.refresh_models()
+        label = job.item.label
+        if job.state == "cancelled":
+            self._status("%s download cancelled" % label)
+            return
+        if job.state == "failed":
+            self._status("%s was not installed" % label, error=True)
+            if self.settings_dialog is None:
+                messagebox.showerror(APP_NAME, "%s could not be downloaded: %s" % (label, job.error),
+                                     parent=self.root)
+            return
+        self._status("%s is installed" % label)
+        if job.item.kind == "ai":
+            if self.settings_dialog is None:
+                messagebox.showinfo(APP_NAME, "The AI sermon summary is ready. Open Service \u2192 Sermon "
+                                    "summary and press Write AI summary.", parent=self.root)
+            return
+        if self.settings["speech_model"] in ("auto", job.item.id):
+            self.use_model(None)
+        elif self.settings_dialog is None and messagebox.askyesno(
+                APP_NAME, "%s is installed. Use it now?" % label, parent=self.root):
+            self.use_model(job.item.id)
+
+    def use_model(self, model_id) -> None:
+        """Switch to a speech model (None: reload the current choice) now, or after listening stops."""
+        if model_id is not None:
+            self.settings["speech_model"] = model_id
+            self.settings.save()
+        if self.listening:
+            self._reload_after_listening = True
+            self._status("The new speech model will be used when you stop listening")
+        else:
+            self.reload_model()
 
     # -- look ------------------------------------------------------------------------
     def _wanted_theme(self) -> str:
@@ -1151,9 +1205,15 @@ class OperatorWindow(object):
             return
         EmphasisDialog(self, sel.book, sel.chapter, sel.cur, self.translation())
 
-    def open_settings(self) -> None:
+    def open_settings(self, tab: str = "") -> None:
         from .ui_settings import SettingsDialog
-        SettingsDialog(self)
+        if self.settings_dialog is not None:
+            try:
+                self.settings_dialog.win.lift()
+                return
+            except tk.TclError:
+                self.settings_dialog = None
+        self.settings_dialog = SettingsDialog(self, tab=tab)
 
     def apply_settings(self) -> None:
         """Called by the settings dialog after a change."""
@@ -1212,6 +1272,7 @@ class OperatorWindow(object):
             return
         self._closing = True
         log.info("closing")
+        self.downloads.cancel_all()
         try:
             if self.is_fullscreen():
                 self.root.attributes("-fullscreen", False)

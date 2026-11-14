@@ -158,7 +158,7 @@ def test_old_windows_is_explained(monkeypatch):
 def test_supported_without_pack_asks_to_install(monkeypatch):
     monkeypatch.setattr(llm, "unsupported_reason", lambda: "")
     ok, note = llm.describe(None)
-    assert not ok and "Install the AI summary pack" in note
+    assert not ok and "Settings \u2192 Models" in note
 
 
 def test_pack_without_this_platform_is_refused(tmp_path, monkeypatch):

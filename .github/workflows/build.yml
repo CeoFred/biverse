@@ -116,7 +116,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py', 'biverse/catalog.py') }}
       - name: Build Bible database
         run: '"$PY" tools/build_bible_db.py'
       - name: Fetch speech models
@@ -222,7 +222,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: packs-${{ hashFiles('tools/fetch_model.py') }}
+          key: packs-${{ hashFiles('tools/fetch_model.py', 'biverse/catalog.py') }}
       - name: High-accuracy model pack (Parakeet + Silero VAD)
         run: |
           VERSION=$(python -c 'import biverse; print(biverse.__version__)')

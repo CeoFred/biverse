@@ -6,12 +6,13 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import colorchooser, filedialog, messagebox, ttk
 
-from . import recognizer
+from . import downloads, recognizer
 
 
 class SettingsDialog(object):
-    def __init__(self, op) -> None:
+    def __init__(self, op, tab: str = "") -> None:
         self.op = op
+        self.model_rows = {}  # type: dict
         s = op.settings
         a = s.appearance
         self.win = tk.Toplevel(op.root)
@@ -22,6 +23,7 @@ class SettingsDialog(object):
 
         nb = ttk.Notebook(self.win)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
+        self.nb = nb
 
         # -- appearance
         ap = ttk.Frame(nb, padding=10)
@@ -102,36 +104,43 @@ class SettingsDialog(object):
         installed = {m.id for m in recognizer.discover_models()}
         ttk.Label(sp, text="In use: %s" % (op.engine.model_label or "(none)"), font=("TkDefaultFont", 11, "bold")).grid(
             row=0, column=0, columnspan=3, sticky="w", pady=(0, 6))
-        choices = [
-            ("auto", "Automatic (recommended)", "both models if the Parakeet pack is installed and this "
-             "computer can run it, else Kroko"),
-            ("both", "Kroko live + Parakeet confirming", "most detections; needs the pack, about 2 GB RAM"
-             if "parakeet" in installed else "not installed \u2014 needs the model pack"),
-            ("kroko", "Kroko \u2014 live, fast, light", "built in"),
-            ("parakeet", "Parakeet \u2014 most accurate, best with accents",
-             "installed" if "parakeet" in installed else "not installed \u2014 needs the model pack"),
-            ("vosk-small", "Classic (Vosk small)", "for computers where the others will not run"
-             if "vosk-small" in installed else "not installed"),
-            ("custom", "A model folder I choose", ""),
-        ]
-        for row, (value, text, note) in enumerate(choices, 1):
-            ttk.Radiobutton(sp, text=text, value=value, variable=self.speech_model).grid(
-                row=row, column=0, sticky="w")
-            ttk.Label(sp, text=note, style="Muted.TLabel").grid(row=row, column=1, columnspan=2, sticky="w",
-                                                                padx=(8, 0))
-        row = len(choices) + 1
+        self.speech_tab = sp
+        self.speech_notes = {}  # type: dict
+        self.speech_radios = {}  # type: dict
+        for row, (value, text) in enumerate(SPEECH_CHOICES, 1):
+            rb = ttk.Radiobutton(sp, text=text, value=value, variable=self.speech_model)
+            rb.grid(row=row, column=0, sticky="w")
+            note = ttk.Label(sp, text="", style="Muted.TLabel")
+            note.grid(row=row, column=1, columnspan=2, sticky="w", padx=(8, 0))
+            self.speech_notes[value] = note
+            self.speech_radios[value] = rb
+        self._speech_notes(installed)
+        row = len(SPEECH_CHOICES) + 1
         folder = ttk.Frame(sp)
         folder.grid(row=row, column=0, columnspan=3, sticky="w", padx=(22, 0))
         ttk.Entry(folder, textvariable=self.model_path, width=38).pack(side="left")
         ttk.Button(folder, text="Choose\u2026", command=self._choose_model).pack(side="left", padx=4)
         row += 1
-        ttk.Separator(sp).grid(row=row, column=0, columnspan=3, sticky="ew", pady=10)
-        row += 1
-        ttk.Button(sp, text="Install model pack\u2026", command=self._install_pack).grid(
-            row=row, column=0, sticky="w")
-        ttk.Label(sp, text="For the Parakeet pack zip from the Biverse download page. Needs a 64-bit computer "
-                           "with about 6 GB of RAM or more.", wraplength=330, style="Muted.TLabel").grid(
-            row=row, column=1, columnspan=2, sticky="w", padx=(8, 0))
+        ttk.Label(sp, text="Models that are not installed can be downloaded in the Models tab.",
+                  style="Muted.TLabel").grid(row=row, column=0, columnspan=3, sticky="w", pady=(10, 0))
+
+        # -- models (download / install)
+        md = ttk.Frame(nb, padding=10)
+        nb.add(md, text="Models")
+        self.models_tab = md
+        ttk.Label(md, text="Biverse downloads and installs the model for you. Downloads keep going if you "
+                           "close this window.", style="Muted.TLabel", wraplength=640).grid(
+            row=0, column=0, columnspan=3, sticky="w")
+        for i, it in enumerate(downloads.items()):
+            self.model_rows[it.id] = ModelRow(self, md, it, row=1 + i)
+        foot = len(self.model_rows) + 1
+        ttk.Separator(md).grid(row=foot, column=0, columnspan=3, sticky="ew", pady=6)
+        ttk.Button(md, text="Install from a file\u2026", command=self._install_pack).grid(
+            row=foot + 1, column=0, sticky="w")
+        ttk.Label(md, text="No internet here? Get the model pack zip from the Biverse website on another "
+                           "computer and install it from the file.", wraplength=520,
+                  style="Muted.TLabel").grid(row=foot + 1, column=1, columnspan=2, sticky="w", padx=(8, 0))
+        md.columnconfigure(1, weight=1)
 
         # -- detection
         dt = ttk.Frame(nb, padding=10)
@@ -165,6 +174,9 @@ class SettingsDialog(object):
                            "chapter and a verse.", style="Muted.TLabel", wraplength=420).grid(
             row=5, column=0, columnspan=2, sticky="w")
 
+        if tab == "models":
+            nb.select(md)
+
         btns = ttk.Frame(self.win, padding=(8, 0, 8, 8))
         btns.pack(fill="x")
         ttk.Button(btns, text="Test output", command=self._test).pack(side="left")
@@ -173,6 +185,49 @@ class SettingsDialog(object):
         self.win.protocol("WM_DELETE_WINDOW", self._ok)
         self.win.bind("<Escape>", lambda e: (self._ok(), "break")[1])
         self.win.grab_set()
+        self._tick()
+
+    # -- models ------------------------------------------------------------------------
+    def _speech_notes(self, installed) -> None:
+        notes = {
+            "auto": "both models if Parakeet is installed and this computer can run it, else Kroko",
+            "both": "most detections; about 2 GB RAM" if "parakeet" in installed else
+                    "needs Parakeet \u2014 download it in the Models tab",
+            "kroko": "built in" if "kroko" in installed else "not installed \u2014 see the Models tab",
+            "parakeet": "installed" if "parakeet" in installed else
+                        "not installed \u2014 download it in the Models tab",
+            "vosk-small": "for computers where the others will not run" if "vosk-small" in installed else
+                          "not installed \u2014 see the Models tab",
+            "custom": "",
+        }
+        for value, label in self.speech_notes.items():
+            label.configure(text=notes.get(value, ""))
+
+    def refresh_models(self) -> None:
+        """Re-read what is installed (after a download finishes)."""
+        try:
+            installed = {m.id for m in recognizer.discover_models()}
+            self._speech_notes(installed)
+            for row in self.model_rows.values():
+                row.refresh()
+        except tk.TclError:
+            pass
+
+    def _tick(self) -> None:
+        """Update download progress while the window is open."""
+        try:
+            if not self.win.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        for row in self.model_rows.values():
+            row.tick()
+        self.win.after(250, self._tick)
+
+    def use_model(self, model_id: str) -> None:
+        self.speech_model.set(model_id)
+        self.op.use_model(model_id)
+        self.op._status("Using %s" % downloads.item(model_id).label)
 
     def _color(self, var, swatch) -> None:
         _, hexval = colorchooser.askcolor(color=var.get(), parent=self.win)
@@ -246,8 +301,114 @@ class SettingsDialog(object):
         self.apply()
         self.win.grab_release()
         self.win.destroy()
+        if self.op.settings_dialog is self:
+            self.op.settings_dialog = None
+
+
+SPEECH_CHOICES = [
+    ("auto", "Automatic (recommended)"),
+    ("both", "Kroko live + Parakeet confirming"),
+    ("kroko", "Kroko \u2014 live, fast, light"),
+    ("parakeet", "Parakeet \u2014 most accurate, best with accents"),
+    ("vosk-small", "Classic (Vosk small)"),
+    ("custom", "A model folder I choose"),
+]
 
 
 def _fullscreen_label() -> str:
     import sys
     return "Ctrl+Cmd+F" if sys.platform == "darwin" else "F11"
+
+
+class ModelRow(object):
+    """One model in the Models tab: name, status, and Download / Cancel / Use."""
+
+    def __init__(self, dlg: SettingsDialog, parent, it: "downloads.Item", row: int) -> None:
+        self.dlg, self.it = dlg, it
+        self.manager = dlg.op.downloads
+        box = ttk.Frame(parent)
+        box.grid(row=row, column=0, columnspan=3, sticky="ew", pady=4)
+        box.columnconfigure(0, weight=1)
+        head = ttk.Frame(box)
+        head.grid(row=0, column=0, sticky="ew")
+        ttk.Label(head, text=it.label, font=("TkDefaultFont", 11, "bold")).pack(side="left")
+        self.badge = ttk.Label(head, text="", style="Muted.TLabel")
+        self.badge.pack(side="left", padx=(8, 0))
+        ttk.Label(box, text=it.about, style="Muted.TLabel", wraplength=560).grid(row=1, column=0, sticky="w")
+        self.bar = ttk.Progressbar(box, orient="horizontal", mode="determinate", maximum=1000, length=560)
+        self.progress_text = ttk.Label(box, text="", style="Muted.TLabel", wraplength=560)
+        btns = ttk.Frame(box)
+        btns.grid(row=0, column=1, rowspan=2, sticky="ne", padx=(12, 0))
+        self.use_button = ttk.Button(btns, text="Use it", width=10, command=self.on_use)
+        self.button = ttk.Button(btns, text="Download", width=12, command=self.on_button)
+        self.button.pack(side="right")
+        self.state = ""
+        self.refresh()
+
+    def refresh(self) -> None:
+        st = downloads.status(self.it)
+        job = self.manager.job(self.it.id)
+        size = downloads.mb(self.it.size())
+        running = job is not None and job.state == "running"
+        if running:
+            self._show_progress(True)
+            self.badge.configure(text="downloading")
+            self.button.configure(text="Cancel", state="normal")
+        elif st.installed:
+            self._show_progress(False)
+            self.badge.configure(text="\u2713 installed" + (" \u00b7 " + st.note if st.note else ""))
+            self.button.configure(text="Installed", state="disabled")
+        else:
+            self._show_progress(job is not None and job.state in ("failed", "cancelled"))
+            self.badge.configure(text="not installed \u00b7 %s%s" % (size, " \u00b7 " + st.note if st.note else ""))
+            self.button.configure(text="Download" if st.can_download else "Not available",
+                                  state="normal" if st.can_download else "disabled")
+            if job is not None and job.state in ("failed", "cancelled"):
+                self.progress_text.configure(text=job.describe())
+        speech = self.it.kind == "speech"
+        current = self.dlg.op.settings["speech_model"]
+        if speech and st.installed and not running and current not in ("auto", self.it.id) and st.can_download:
+            self.use_button.pack(side="right", padx=(0, 6))
+        else:
+            self.use_button.pack_forget()
+
+    def _show_progress(self, on: bool) -> None:
+        if on:
+            self.bar.grid(row=2, column=0, sticky="w", pady=(4, 0))
+            self.progress_text.grid(row=3, column=0, sticky="w")
+        else:
+            self.bar.grid_remove()
+            self.progress_text.grid_remove()
+
+    def tick(self) -> None:
+        job = self.manager.job(self.it.id)
+        if job is None or job.state != "running":
+            if self.state == "running":
+                self.refresh()
+            self.state = job.state if job is not None else ""
+            return
+        if self.state != "running":
+            self.state = "running"
+            self.refresh()
+        self.bar.configure(value=int(job.fraction() * 1000))
+        self.progress_text.configure(text=job.describe())
+
+    def on_button(self) -> None:
+        job = self.manager.job(self.it.id)
+        if job is not None and job.state == "running":
+            self.manager.cancel(self.it.id)
+            self.progress_text.configure(text="Stopping\u2026")
+            return
+        if self.it.size() > 300e6 and not messagebox.askokcancel(
+                "Download %s" % self.it.label,
+                "%s is a %s download. Start it now?\n\nOn a slow or metered connection, you can also download the "
+                "model pack from the Biverse website on another computer." % (self.it.label, downloads.mb(
+                    self.it.size())), parent=self.dlg.win):
+            return
+        self.manager.start(self.it.id)
+        self.state = ""
+        self.tick()
+
+    def on_use(self) -> None:
+        self.dlg.use_model(self.it.id)
+        self.refresh()

@@ -51,7 +51,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py', 'biverse/catalog.py') }}
       - name: Build Bible database
         run: python tools/build_bible_db.py
       - name: Fetch speech models
@@ -74,7 +74,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py') }}
+          key: sources-${{ hashFiles('tools/build_bible_db.py', 'tools/fetch_model.py', 'biverse/catalog.py') }}
       - run: python tools/build_bible_db.py && python tools/fetch_model.py --name kroko
       - name: Operator window at 1024x600 and 1920x1080, projector output at 1920x1080
         run: |
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: parakeet-${{ hashFiles('tools/fetch_model.py') }}
+          key: parakeet-${{ hashFiles('tools/fetch_model.py', 'biverse/catalog.py') }}
       - run: python tools/fetch_model.py --name parakeet
       - name: Parakeet recognition test
         run: python -m pytest -q -rs tests/test_recognition.py -k parakeet
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: ai-summary-${{ hashFiles('tools/fetch_model.py') }}
+          key: ai-summary-${{ hashFiles('tools/fetch_model.py', 'biverse/catalog.py') }}
       - name: Install the AI pack (Linux binary only)
         run: python tools/fetch_model.py --name ai-summary --platforms linux-x64 --dest "$HOME/ai"
       - name: Write a summary with the real model

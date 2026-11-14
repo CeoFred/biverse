@@ -186,6 +186,6 @@ def describe(pack: Optional[AIPack]) -> Tuple[bool, str]:
     if reason:
         return False, reason
     if pack is None:
-        return False, "Install the AI summary pack (Settings → Speech → Install model pack…)"
+        return False, "Download the AI summary in Settings \u2192 Models"
     warning = platform_warning()
     return True, pack.label + (" (%s)" % warning if warning else "")

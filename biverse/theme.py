@@ -117,6 +117,8 @@ def apply(root, mode: str) -> Dict[str, str]:
                     lightcolor=p["live"], darkcolor=p["live"], font=(fam, size, "bold"))
     style.map("Live.TButton", background=[("active", p["live"])])
 
+    style.configure("Horizontal.TProgressbar", background=p["accent"], troughcolor=p["meter_bg"],
+                    bordercolor=p["border"], lightcolor=p["accent"], darkcolor=p["accent"], thickness=10)
     style.configure("TEntry", fieldbackground=p["input"], foreground=p["text"], bordercolor=p["border"],
                     lightcolor=p["border"], darkcolor=p["border"], padding=6, insertcolor=p["text"])
     style.map("TEntry", bordercolor=[("focus", p["accent"])], lightcolor=[("focus", p["accent"])])
