@@ -18,6 +18,7 @@ def op(bible, tmp_path):
     from biverse.ui_operator import OperatorWindow
     settings = Settings(str(tmp_path / "settings.json"))
     settings["output_visible"] = False
+    settings["operator_fullscreen"] = False
     # Don't load real speech models (up to ~2 GB) in UI tests
     settings["speech_model"] = "custom"
     settings["model_path"] = str(tmp_path / "no-model")
@@ -128,6 +129,13 @@ def test_settings_dialog_opens(op):
     dlg.bold.set(False)
     dlg._ok()
     assert op.settings.appearance.bold is False
+
+
+def test_operator_full_screen_toggle_is_remembered(op):
+    op.set_fullscreen(True)
+    assert op.settings["operator_fullscreen"] is True and op.fullscreen_var.get() is True
+    op.toggle_fullscreen()
+    assert op.settings["operator_fullscreen"] is False and op.fullscreen_var.get() is False
 
 
 def test_render_thumbnail_matches_output_aspect(op):

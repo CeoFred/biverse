@@ -29,6 +29,9 @@ log = logging.getLogger(__name__)
 IS_MAC = sys.platform == "darwin"
 MOD = "Command" if IS_MAC else "Control"
 MOD_LABEL = "Cmd" if IS_MAC else "Ctrl"
+# operator window full screen: the platform's usual shortcut
+FULLSCREEN_KEYS = ("<Control-Command-f>", "<F11>") if IS_MAC else ("<F11>",)
+FULLSCREEN_LABEL = "Ctrl+Cmd+F" if IS_MAC else "F11"
 POLL_MS = 50
 TRANSCRIPT_SECONDS = 120
 SAMPLE = Selection(19, 23, 1, 1)
@@ -90,6 +93,8 @@ class OperatorWindow(object):
         self._build()
         self._bind_keys()
         self._restore_geometry()
+        if settings["operator_fullscreen"]:
+            root.after(200, lambda: self.set_fullscreen(True, remember=False))
 
         self.refresh_devices(initial=True)
         self.refresh_displays(initial=True)
@@ -114,6 +119,11 @@ class OperatorWindow(object):
         outm.add_command(label="Test output", command=self.test_output)
         outm.add_command(label="Refresh displays", command=self.refresh_displays)
         menubar.add_cascade(label="Output", menu=outm)
+        viewm = tk.Menu(menubar, tearoff=False)
+        self.fullscreen_var = tk.BooleanVar(value=False)
+        viewm.add_checkbutton(label="Full screen", variable=self.fullscreen_var, accelerator=FULLSCREEN_LABEL,
+                              command=lambda: self.set_fullscreen(self.fullscreen_var.get()))
+        menubar.add_cascade(label="View", menu=viewm)
         servm = tk.Menu(menubar, tearoff=False)
         servm.add_command(label="Sermon summary\u2026", command=self.open_summary,
                           accelerator="%s+Shift+S" % MOD_LABEL)
@@ -314,6 +324,8 @@ class OperatorWindow(object):
         r.bind_all("<%s-l>" % MOD, lambda e: self._key(self.toggle_listen))
         r.bind_all("<%s-m>" % MOD, lambda e: self._key(self.toggle_mode))
         r.bind_all("<%s-q>" % MOD, lambda e: self._key(self.close))
+        for seq in FULLSCREEN_KEYS:
+            r.bind(seq, lambda e: self._key(self.toggle_fullscreen))
         if IS_MAC:
             r.createcommand("tk::mac::Quit", self.close)
             r.createcommand("tk::mac::ShowPreferences", self.open_settings)
@@ -332,6 +344,27 @@ class OperatorWindow(object):
         return "break"
 
     # ------------------------------------------------------------ geometry
+    def is_fullscreen(self) -> bool:
+        try:
+            return bool(int(self.root.attributes("-fullscreen")))
+        except (tk.TclError, ValueError):
+            return False
+
+    def set_fullscreen(self, on: bool, remember: bool = True) -> None:
+        """Operator window full screen (View menu, F11 / Ctrl+Cmd+F). Remembered for next time."""
+        try:
+            self.root.attributes("-fullscreen", bool(on))
+        except tk.TclError:
+            log.warning("full screen is not available here")
+            on = False
+        self.fullscreen_var.set(bool(on))
+        if remember:
+            self.settings["operator_fullscreen"] = bool(on)
+
+    def toggle_fullscreen(self) -> None:
+        # our own state: on macOS Tk reports the change only after the animation
+        self.set_fullscreen(not self.fullscreen_var.get())
+
     def _restore_geometry(self) -> None:
         geo = self.settings["window_geometry"]
         if geo:
@@ -1149,7 +1182,8 @@ class OperatorWindow(object):
             "%s+F\t\tFocus search" % MOD_LABEL,
             "%s+L\t\tListen on/off" % MOD_LABEL,
             "%s+M\t\tManual / Auto" % MOD_LABEL,
-            "F11 (on output)\tFull screen / windowed",
+            "%s\t\tOperator window full screen" % FULLSCREEN_LABEL,
+            "F11 (on output)\tOutput full screen / windowed",
         ]), parent=self.root)
 
     def show_about(self) -> None:
@@ -1178,6 +1212,11 @@ class OperatorWindow(object):
             return
         self._closing = True
         log.info("closing")
+        try:
+            if self.is_fullscreen():
+                self.root.attributes("-fullscreen", False)
+        except tk.TclError:
+            pass
         try:
             if self.root.state() == "normal":
                 self.settings["window_geometry"] = self.root.geometry()

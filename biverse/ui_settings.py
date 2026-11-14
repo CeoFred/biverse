@@ -35,6 +35,7 @@ class SettingsDialog(object):
         self.refpos = tk.StringVar(value=a.reference_position)
         self.image = tk.StringVar(value=a.background_image)
         self.fit_range = tk.BooleanVar(value=s["fit_range"])
+        self.op_fullscreen = tk.BooleanVar(value=s["operator_fullscreen"])
         self.ui_theme = tk.StringVar(value={"system": "Follow the computer", "dark": "Dark",
                                             "light": "Light"}[s["ui_theme"]])
 
@@ -89,6 +90,9 @@ class SettingsDialog(object):
         ttk.Combobox(ap, textvariable=self.ui_theme, state="readonly", width=20,
                      values=["Follow the computer", "Dark", "Light"]).grid(row=row, column=1, columnspan=2,
                                                                            sticky="w", pady=(10, 2))
+        row += 1
+        ttk.Checkbutton(ap, text="Open the operator window full screen (%s switches)" % _fullscreen_label(),
+                        variable=self.op_fullscreen).grid(row=row, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
         # -- speech
         sp = ttk.Frame(nb, padding=10)
@@ -212,6 +216,8 @@ class SettingsDialog(object):
         a.background_image = self.image.get().strip()
         s.appearance = a
         s["fit_range"] = bool(self.fit_range.get())
+        if bool(self.op_fullscreen.get()) != s["operator_fullscreen"]:
+            self.op.set_fullscreen(bool(self.op_fullscreen.get()))
         s["ui_theme"] = {"Follow the computer": "system", "Dark": "dark", "Light": "light"}[self.ui_theme.get()]
         self.op._check_theme()
         s["strict_books"] = bool(self.strict.get())
@@ -240,3 +246,8 @@ class SettingsDialog(object):
         self.apply()
         self.win.grab_release()
         self.win.destroy()
+
+
+def _fullscreen_label() -> str:
+    import sys
+    return "Ctrl+Cmd+F" if sys.platform == "darwin" else "F11"

@@ -34,6 +34,7 @@ DEFAULTS = {
     "appearance": Appearance().to_dict(),
     "fit_range": False,             # fit a whole range on one slide when it fits
     "window_geometry": "",
+    "operator_fullscreen": True,    # open the operator window full screen
     "ui_theme": "system",           # operator window look: system | dark | light
     "speech_model": "auto",          # auto | kroko | parakeet | vosk-small | custom
     "model_path": "",               # folder used when speech_model == "custom"
