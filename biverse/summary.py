@@ -66,6 +66,24 @@ class SermonLog(object):
     def empty(self) -> bool:
         return not self.lines
 
+    def clear(self) -> None:
+        """Forget everything heard so far (the operator cleared the transcript)."""
+        self.lines = []
+        self.refs = []
+        self.ended = self.started
+
+    def add_lines(self, lines: List[Tuple[float, str]], refs: Optional[List[Tuple[float, str]]] = None) -> None:
+        """Append pasted or imported lines; their times are seconds from their own start
+        and are placed after what is already recorded."""
+        base = self.lines[-1][0] + 5.0 if self.lines else 0.0
+        for t, text in lines:
+            if text.strip():
+                self.lines.append((base + t, text.strip()))
+        for t, label in refs or []:
+            self.refs.append((base + t, label))
+        if self.lines:
+            self.ended = max(self.ended, self.started + self.lines[-1][0])
+
     def text(self) -> str:
         return " ".join(t for _s, t in self.lines)
 
@@ -92,6 +110,149 @@ class SermonLog(object):
             json.dump(self.to_dict(), f, indent=1)
         os.replace(tmp, path)
         return path
+
+
+# -- pasted / imported transcripts ---------------------------------------------------
+
+#: What "Paste transcript" and "Import transcript" accept.
+TRANSCRIPT_FORMATS = ("plain text (optionally with times like 00:12:05), SRT or WebVTT subtitles, "
+                      "or a Biverse sermon record")
+TRANSCRIPT_FILETYPES = [("Transcripts", "*.txt *.srt *.vtt *.json *.md"), ("Text", "*.txt"),
+                        ("Subtitles", "*.srt *.vtt"), ("Sermon records", "*.json")]
+MAX_TRANSCRIPT_CHARS = 2000000
+WORDS_PER_SECOND = 2.5  # about 150 words a minute, for text without times
+
+_CUE_TIME = re.compile(r"^\s*((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)\s*-->\s*((?:\d+:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)")
+_LINE_TIME = re.compile(r"^\s*[\[(]?((?:\d{1,2}:)?\d{1,2}:\d{2})(?:[.,]\d+)?[\])]?\s*[-\u2013:]?\s+(.*)$")
+_TAG = re.compile(r"<[^>]{0,200}>")
+
+
+class TranscriptError(ValueError):
+    """The text is not a transcript Biverse accepts."""
+
+
+def _secs(stamp: str) -> float:
+    parts = stamp.replace(",", ".").split(":")
+    out = 0.0
+    for p in parts:
+        out = out * 60 + float(p)
+    return out
+
+
+def _check_text(text: str) -> str:
+    if text is None or not text.strip():
+        raise TranscriptError("There is no text to add.")
+    if len(text) > MAX_TRANSCRIPT_CHARS:
+        raise TranscriptError("That is too long for one sermon (more than %d characters)." % MAX_TRANSCRIPT_CHARS)
+    controls = sum(1 for ch in text if ord(ch) < 32 and ch not in "\t\r\n\f")
+    if "\x00" in text or controls > len(text) // 100:
+        raise TranscriptError("That looks like a binary file, not text.")
+    head = text.lstrip()[:200].lower()
+    if head.startswith("{\\rtf"):
+        raise TranscriptError("Rich text (RTF) is not accepted. Save it as plain text (.txt) first.")
+    if head.startswith(("<!doctype", "<html", "<?xml")) or re.search(r"<(div|p|span|body|table)\b", head):
+        raise TranscriptError("HTML or XML is not accepted. Copy the plain text instead.")
+    if not re.search(r"[^\W\d_]", text, re.UNICODE):
+        raise TranscriptError("There are no words in that text.")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _subtitles(text: str) -> List[Tuple[float, str]]:
+    out = []  # type: List[Tuple[float, str]]
+    for block in re.split(r"\n\s*\n", text):
+        rows = [r for r in block.split("\n") if r.strip()]
+        for i, row in enumerate(rows):
+            m = _CUE_TIME.match(row)
+            if m:
+                words = " ".join(_TAG.sub("", r).strip() for r in rows[i + 1:]).strip()
+                if words:
+                    out.append((_secs(m.group(1)), words))
+                break
+    # subtitles repeat a line while it scrolls; drop exact repeats
+    deduped = []  # type: List[Tuple[float, str]]
+    for t, w in out:
+        if not deduped or deduped[-1][1] != w:
+            deduped.append((t, w))
+    return deduped
+
+
+def _plain(text: str) -> List[Tuple[float, str]]:
+    rows = [r.strip() for r in text.split("\n") if r.strip()]
+    stamped = [_LINE_TIME.match(r) for r in rows]
+    if rows and sum(1 for m in stamped if m) >= max(1, len(rows) // 2):
+        out = []  # type: List[Tuple[float, str]]
+        first = None
+        for r, m in zip(rows, stamped):
+            if m:
+                t = _secs(m.group(1))
+                first = t if first is None else first
+                if t < first:  # clock times past midnight, or out of order
+                    t += 24 * 3600
+                out.append((t - first, m.group(2).strip()))
+            elif out:
+                out[-1] = (out[-1][0], out[-1][1] + " " + r)
+        return [(t, w) for t, w in out if w]
+    out = []
+    t = 0.0
+    for r in rows:
+        if r.startswith("#") and len(r) < 120:  # markdown headings are not speech
+            continue
+        out.append((t, r))
+        t += len(r.split()) / WORDS_PER_SECOND
+    return out
+
+
+def parse_transcript(text: str) -> List[Tuple[float, str]]:
+    """``[(seconds from start, text), ...]`` from pasted or imported text.
+
+    Accepts plain text (lines may start with a time such as ``00:12:05`` or
+    ``[12:05]``, as Biverse's own transcript panel shows them), SRT and WebVTT
+    subtitles, and Biverse sermon records (JSON). Anything else raises
+    ``TranscriptError`` with a message for the operator.
+    """
+    text = _check_text(text)
+    stripped = text.lstrip("\ufeff \t\n")
+    if stripped.startswith(("{", "[")):
+        try:
+            data = json.loads(stripped)
+        except ValueError:
+            data = None
+        if data is not None:
+            if isinstance(data, dict) and isinstance(data.get("lines"), list):
+                try:
+                    lines = SermonLog.from_dict(data).lines
+                except (TypeError, ValueError):
+                    raise TranscriptError("That sermon record is damaged.")
+                if lines:
+                    return lines
+                raise TranscriptError("That sermon record has no transcript.")
+            raise TranscriptError("That JSON is not a Biverse sermon record.")
+    if stripped.upper().startswith("WEBVTT") or any(_CUE_TIME.match(r) for r in stripped.split("\n")[:20]):
+        lines = _subtitles(stripped)
+        if lines:
+            return lines
+        raise TranscriptError("Those subtitles have no text.")
+    lines = _plain(stripped)
+    if not lines:
+        raise TranscriptError("There is no text to add.")
+    return lines
+
+
+def references_in(lines: List[Tuple[float, str]], verse_count=None) -> List[Tuple[float, str]]:
+    """Scripture references spoken in these lines, as ``[(seconds, "John 3:16"), ...]``,
+    found the same way as while listening."""
+    from .controller import Selection
+    from .detector import NEW, Detector
+    kw = {"verse_count": verse_count} if verse_count else {}
+    det = Detector(**kw)
+    out = []  # type: List[Tuple[float, str]]
+    for t, text in lines:
+        for kind, d in det.feed_final(text, now=t):
+            if kind == NEW:
+                label = Selection.from_reference(d.ref).passage_label()
+                if not out or out[-1][1] != label:
+                    out.append((t, label))
+    return out
 
 
 def recent_sermons(folder: Optional[str] = None, limit: int = 20) -> List[str]:

@@ -507,6 +507,36 @@ def test_sermon_record_and_summary_window(op):
     w.win.destroy()
 
 
+def test_paste_and_clear_transcript_reaches_the_summary(op, monkeypatch):
+    from tkinter import messagebox
+    monkeypatch.setattr(messagebox, "askyesno", lambda *a, **k: True)
+    errors = []
+    monkeypatch.setattr(messagebox, "showerror", lambda *a, **k: errors.append(a))
+    op.root.clipboard_clear()
+    op.root.clipboard_append("10:00:00 Good morning church\n10:00:30 turn to Romans 8 verse 28 with me\n")
+    op.paste_transcript()
+    assert not errors
+    assert "Romans 8 verse 28" in op.transcript.get("1.0", "end")
+    assert len(op.sermon.lines) == 2 and op.sermon.refs[0][1] == "Romans 8:28"
+    op.open_summary()
+    op.root.update()
+    assert "Romans 8:28" in op.summary_window.text.get("1.0", "end")
+    op.clear_transcript()
+    assert op.transcript.get("1.0", "end").strip() == ""
+    assert op.sermon.empty() and op.sermon.refs == []
+    assert "Romans 8:28" not in op.summary_window.text.get("1.0", "end")
+    op.summary_window.win.destroy()
+
+
+def test_unaccepted_paste_is_refused(op, monkeypatch):
+    from tkinter import messagebox
+    errors = []
+    monkeypatch.setattr(messagebox, "showerror", lambda *a, **k: errors.append(a[1]))
+    assert not op.add_transcript_text("<html><body>hello</body></html>", "the clipboard")
+    assert errors and "not added" in errors[0]
+    assert op.sermon is None or op.sermon.empty()
+
+
 def test_online_versions_appear_and_fall_back(op, tmp_path):
     from biverse.online_bible import OnlineBibles
     from tests.test_online_bible import FakeApi
