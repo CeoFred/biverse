@@ -7,7 +7,7 @@ on:
   pull_request:
     paths:
       - "packaging/**"
-      - "versecast/**"
+      - "biverse/**"
       - "tools/**"
       - "requirements*.txt"
       - ".github/workflows/build.yml"
@@ -130,10 +130,10 @@ jobs:
         env:
           BIVERSE_MACOS_MIN: ${{ matrix.macos_min }}
           BIVERSE_BUNDLE_MODELS: ${{ matrix.models || 'kroko' }}
-        run: '"$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/versecast.spec'
+        run: '"$PY" -m PyInstaller --noconfirm --clean --distpath dist --workpath build/pyi packaging/biverse.spec'
 
       - name: Version
-        run: echo "VERSION=$("$PY" -c 'import versecast; print(versecast.__version__)')" >> "$GITHUB_ENV"
+        run: echo "VERSION=$("$PY" -c 'import biverse; print(biverse.__version__)')" >> "$GITHUB_ENV"
 
       - name: Verify bundled native libraries
         run: |
@@ -148,13 +148,13 @@ jobs:
           BIVERSE_CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
         run: |
           if [ -n "$BIVERSE_CODESIGN_ID" ]; then
-            codesign --force --deep --options runtime -s "$BIVERSE_CODESIGN_ID" dist/BiVerse.app
+            codesign --force --deep --options runtime -s "$BIVERSE_CODESIGN_ID" dist/Biverse.app
           else
-            codesign --force --deep -s - dist/BiVerse.app
+            codesign --force --deep -s - dist/Biverse.app
           fi
-          codesign --verify --deep --strict dist/BiVerse.app
+          codesign --verify --deep --strict dist/Biverse.app
           # Risk check (spec §15): minimum macOS of every bundled Mach-O
-          find dist/BiVerse.app -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dyld" -o -perm +111 \) | while read f; do
+          find dist/Biverse.app -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dyld" -o -perm +111 \) | while read f; do
             if file "$f" | grep -q Mach-O; then
               v=$(otool -l "$f" | awk '/LC_VERSION_MIN_MACOSX/{f=1} /LC_BUILD_VERSION/{f=1} f&&/version|minos/{print $2; f=0; exit}')
               echo "$v  ${f#dist/}"
@@ -164,15 +164,15 @@ jobs:
       - name: macOS - optional notarisation
         if: runner.os == 'macOS' && env.NOTARY_PROFILE != ''
         run: |
-          ditto -c -k --keepParent dist/BiVerse.app notarize.zip
+          ditto -c -k --keepParent dist/Biverse.app notarize.zip
           xcrun notarytool submit notarize.zip --keychain-profile "$NOTARY_PROFILE" --wait
-          xcrun stapler staple dist/BiVerse.app
+          xcrun stapler staple dist/Biverse.app
 
       - name: Smoke test (packaged build, --self-test)
         if: runner.os == 'macOS'
         run: |
           export BIVERSE_CONFIG_DIR="$RUNNER_TEMP/biverse-cfg"
-          dist/BiVerse.app/Contents/MacOS/BiVerse --self-test --report self-test.json || { cat self-test.json; exit 1; }
+          dist/Biverse.app/Contents/MacOS/Biverse --self-test --report self-test.json || { cat self-test.json; exit 1; }
           cat self-test.json
 
       - name: Smoke test (packaged build, --self-test)
@@ -180,8 +180,8 @@ jobs:
         shell: pwsh
         run: |
           $env:BIVERSE_CONFIG_DIR = "$env:RUNNER_TEMP\biverse-cfg"
-          # BiVerse.exe is a windowed (GUI-subsystem) program: wait for it explicitly
-          $p = Start-Process -FilePath "dist\BiVerse\BiVerse.exe" -ArgumentList "--self-test","--report","self-test.json" -Wait -PassThru -NoNewWindow
+          # Biverse.exe is a windowed (GUI-subsystem) program: wait for it explicitly
+          $p = Start-Process -FilePath "dist\Biverse\Biverse.exe" -ArgumentList "--self-test","--report","self-test.json" -Wait -PassThru -NoNewWindow
           Get-Content self-test.json
           if ($p.ExitCode -ne 0) { throw "self-test failed with exit code $($p.ExitCode)" }
 
@@ -189,16 +189,16 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $name = "BiVerse-$env:VERSION-${{ matrix.name }}.zip"
+          $name = "Biverse-$env:VERSION-${{ matrix.name }}.zip"
           Copy-Item packaging\README.txt dist\README.txt
-          Compress-Archive -Path dist\BiVerse, dist\README.txt -DestinationPath $name
+          Compress-Archive -Path dist\Biverse, dist\README.txt -DestinationPath $name
           "ZIP=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Zip (macOS)
         if: runner.os == 'macOS'
         run: |
-          ZIP="BiVerse-$VERSION-${{ matrix.name }}.zip"
-          ditto -c -k --keepParent dist/BiVerse.app "$ZIP"
+          ZIP="Biverse-$VERSION-${{ matrix.name }}.zip"
+          ditto -c -k --keepParent dist/Biverse.app "$ZIP"
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
       - uses: actions/upload-artifact@v4
@@ -222,11 +222,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: data/cache
-          key: parakeet-${{ hashFiles('tools/fetch_model.py') }}
+          key: packs-${{ hashFiles('tools/fetch_model.py') }}
       - name: High-accuracy model pack (Parakeet + Silero VAD)
         run: |
-          VERSION=$(python -c 'import versecast; print(versecast.__version__)')
-          python tools/fetch_model.py --name parakeet --dest pack-models --pack "pack/BiVerse-model-pack-parakeet-$VERSION.zip"
+          VERSION=$(python -c 'import biverse; print(biverse.__version__)')
+          python tools/fetch_model.py --name parakeet --dest pack-models --pack "pack/Biverse-model-pack-parakeet-$VERSION.zip"
+      - name: AI summary pack (Qwen2.5 1.5B + llama.cpp for macOS, Windows, Linux)
+        run: |
+          VERSION=$(python -c 'import biverse; print(biverse.__version__)')
+          python tools/fetch_model.py --name ai-summary --dest pack-models --pack "pack/Biverse-ai-summary-pack-$VERSION.zip"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -239,4 +243,4 @@ jobs:
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --title "BiVerse ${GITHUB_REF_NAME}" --generate-notes
+        run: gh release create "${GITHUB_REF_NAME}" release/* --repo "${GITHUB_REPOSITORY}" --title "Biverse ${GITHUB_REF_NAME}" --generate-notes

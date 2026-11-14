@@ -1,4 +1,4 @@
-# BiVerse – notes for Claude
+# Biverse – notes for Claude
 
 ## graphify (token-efficient code navigation)
 

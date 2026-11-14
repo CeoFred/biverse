@@ -41,7 +41,9 @@ class OperatorWindow(object):
         self.bible = bible
         self.events = queue.Queue()  # type: queue.Queue
         self.renderer = Renderer(root)
-        self.builder = SlideBuilder(bible)
+        from .emphasis import EmphasisStore
+        self.emphasis = EmphasisStore()
+        self.builder = SlideBuilder(bible, self.emphasis)
         self.preview = None  # type: Optional[Selection]
         self.live = LiveState()
         self.devices = []  # type: List[audio.InputDevice]
@@ -55,6 +57,7 @@ class OperatorWindow(object):
         self._results = {}  # type: Dict[str, Selection]
         self._closing = False
         self._last_command = None
+        self.sermon = None  # SermonLog of the current service
         self._partials_seen = False
         self._passage_start = None  # (book, chapter, verse) of the passage last sent live
         self.following = True       # follow-the-reading on/off ("stop there" / "continue")
@@ -68,6 +71,7 @@ class OperatorWindow(object):
         self.engine = SpeechEngine(self.events, self.detector)
         self.engine.use_reference = settings["reference_recognizer"]
         self.engine.commands = settings["voice_commands"]
+        self.engine.translations = [(c, n) for c, n, _l in bible.translations()]
         self.capture = audio.AudioCapture(self.engine.audio_queue)
 
         from .follow import ReadingFollower
@@ -76,6 +80,10 @@ class OperatorWindow(object):
             lambda b, c, v: [t for t in (bible.verse(code, b, c, v) for code in codes) if t], bible.verse_count)
         self.output = OutputWindow(root, self.renderer, settings.appearance, on_visibility=self._on_output_visible)
 
+        from . import theme as _theme
+        self._theme = _theme
+        self.theme_mode = self._wanted_theme()
+        self.pal = _theme.apply(root, self.theme_mode)
         root.title("%s %s" % (APP_NAME, __version__))
         root.minsize(900, 560)
         self._build_menu()
@@ -106,6 +114,12 @@ class OperatorWindow(object):
         outm.add_command(label="Test output", command=self.test_output)
         outm.add_command(label="Refresh displays", command=self.refresh_displays)
         menubar.add_cascade(label="Output", menu=outm)
+        servm = tk.Menu(menubar, tearoff=False)
+        servm.add_command(label="Sermon summary\u2026", command=self.open_summary,
+                          accelerator="%s+Shift+S" % MOD_LABEL)
+        servm.add_command(label="Start a new sermon", command=self.new_sermon)
+        servm.add_command(label="Open a previous sermon\u2026", command=self.open_previous_sermon)
+        menubar.add_cascade(label="Service", menu=servm)
         helpm = tk.Menu(menubar, tearoff=False)
         helpm.add_command(label="Keyboard shortcuts", command=self.show_shortcuts)
         helpm.add_command(label="Open log folder", command=self.open_log_folder)
@@ -115,39 +129,37 @@ class OperatorWindow(object):
 
     def _build(self) -> None:
         root = self.root
-        outer = ttk.Frame(root, padding=(6, 4, 6, 6))
+        outer = ttk.Frame(root, padding=(10, 8, 10, 10))
         outer.pack(fill="both", expand=True)
 
         # banner (missing model / errors)
-        self.banner = tk.Label(outer, text="", anchor="w", justify="left", background="#fff3cd",
-                               foreground="#5c4400", padx=8, pady=4, wraplength=900)
+        self.banner = tk.Label(outer, text="", anchor="w", justify="left", padx=10, pady=6, wraplength=900)
 
         # row 1: input
         r1 = ttk.Frame(outer)
-        r1.pack(fill="x", pady=(0, 2))
-        ttk.Label(r1, text="Input:").pack(side="left")
+        r1.pack(fill="x", pady=(0, 4))
+        ttk.Label(r1, text=APP_NAME, style="Title.TLabel").pack(side="left", padx=(0, 14))
+        ttk.Label(r1, text="Input", style="Muted.TLabel").pack(side="left")
         self.input_var = tk.StringVar()
         self.input_combo = ttk.Combobox(r1, textvariable=self.input_var, state="readonly", width=38)
         self.input_combo.pack(side="left", padx=(4, 2))
         self.input_combo.bind("<<ComboboxSelected>>", lambda e: self._on_device_selected())
         ttk.Button(r1, text="⟳", width=3, command=self.refresh_devices).pack(side="left")
-        self.meter = tk.Canvas(r1, width=110, height=14, highlightthickness=1, highlightbackground="#888",
-                               background="#202020")
-        self.meter.pack(side="left", padx=6)
-        self.listen_dot = tk.Label(r1, text="●", foreground="#888888", font=("TkDefaultFont", 14))
+        self.meter = tk.Canvas(r1, width=110, height=12, highlightthickness=0, borderwidth=0)
+        self.meter.pack(side="left", padx=8)
+        self.listen_dot = tk.Label(r1, text="●", font=("TkDefaultFont", 14))
         self.listen_dot.pack(side="left")
         self.listen_btn = ttk.Button(r1, text="Listen", width=10, command=self.toggle_listen)
-        self.listen_btn.pack(side="left", padx=(0, 8))
-        ttk.Label(r1, text="Status:").pack(side="left")
+        self.listen_btn.pack(side="left", padx=(2, 10))
         self.status_var = tk.StringVar(value="Starting…")
         self.status_label = tk.Label(r1, textvariable=self.status_var, anchor="w")
         self.status_label.pack(side="left", fill="x", expand=True, padx=4)
-        self._status_fg = self.status_label.cget("foreground")
+        self._status_error = False
 
         # row 2: output + translation
         r2 = ttk.Frame(outer)
-        r2.pack(fill="x", pady=2)
-        ttk.Label(r2, text="Output:").pack(side="left")
+        r2.pack(fill="x", pady=4)
+        ttk.Label(r2, text="Output", style="Muted.TLabel").pack(side="left")
         self.display_var = tk.StringVar()
         self.display_combo = ttk.Combobox(r2, textvariable=self.display_var, state="readonly", width=30)
         self.display_combo.pack(side="left", padx=(4, 2))
@@ -155,26 +167,26 @@ class OperatorWindow(object):
         ttk.Button(r2, text="⟳", width=3, command=self.refresh_displays).pack(side="left")
         self.output_btn = ttk.Button(r2, text="Show output", width=12, command=self.toggle_output)
         self.output_btn.pack(side="left", padx=6)
-        ttk.Label(r2, text="Bible:").pack(side="left", padx=(10, 0))
+        ttk.Label(r2, text="Bible", style="Muted.TLabel").pack(side="left", padx=(10, 0))
         self.translation_var = tk.StringVar(value=self.settings["translation"])
         codes = [c for c, _, _ in self.bible.translations()]
         self.translation_combo = ttk.Combobox(r2, textvariable=self.translation_var, values=codes,
                                               state="readonly", width=8)
         self.translation_combo.pack(side="left", padx=4)
         self.translation_combo.bind("<<ComboboxSelected>>", lambda e: self._on_translation())
-        self.translation_name = ttk.Label(r2, text="", foreground="#666666")
+        self.translation_name = ttk.Label(r2, text="", style="Muted.TLabel")
         self.translation_name.pack(side="left")
 
         # row 3: mode + settings
         r3 = ttk.Frame(outer)
-        r3.pack(fill="x", pady=(2, 4))
-        ttk.Label(r3, text="Mode:").pack(side="left")
+        r3.pack(fill="x", pady=(4, 8))
+        ttk.Label(r3, text="Mode", style="Muted.TLabel").pack(side="left")
         self.mode_var = tk.StringVar(value=self.settings["mode"])
         ttk.Radiobutton(r3, text="Manual", value="manual", variable=self.mode_var,
                         command=self._on_mode).pack(side="left", padx=4)
         ttk.Radiobutton(r3, text="Auto", value="auto", variable=self.mode_var,
                         command=self._on_mode).pack(side="left", padx=4)
-        self.mode_hint = ttk.Label(r3, text="", foreground="#666666")
+        self.mode_hint = ttk.Label(r3, text="", style="Muted.TLabel")
         self.mode_hint.pack(side="left", padx=8)
         ttk.Button(r3, text="⚙ Settings", command=self.open_settings).pack(side="right")
         self.banner_anchor = r1
@@ -187,18 +199,17 @@ class OperatorWindow(object):
         main.add(left, weight=2)
         main.add(right, weight=3)
 
-        tframe = ttk.LabelFrame(left, text="Transcript", padding=4)
-        self.transcript = tk.Text(tframe, height=8, wrap="word", state="disabled", relief="flat",
-                                  background="#fbfbfb", foreground="#111111", font=("TkDefaultFont", 11))
+        tframe = ttk.LabelFrame(left, text="TRANSCRIPT", padding=6)
+        self.transcript = tk.Text(tframe, height=8, wrap="word", state="disabled", relief="flat", borderwidth=0,
+                                  highlightthickness=0, padx=6, pady=4, font=("TkDefaultFont", 12))
         tscroll = ttk.Scrollbar(tframe, command=self.transcript.yview)
         self.transcript.configure(yscrollcommand=tscroll.set)
         tscroll.pack(side="right", fill="y")
         self.transcript.pack(fill="both", expand=True)
-        self.transcript.tag_configure("partial", foreground="#999999")
-        self.transcript.tag_configure("time", foreground="#999999")
+
         left.add(tframe, weight=1)
 
-        dframe = ttk.LabelFrame(left, text="Detected  (click = preview, double-click = go live)", padding=4)
+        dframe = ttk.LabelFrame(left, text="DETECTED  \u00b7  click = preview, double-click = go live", padding=6)
         self.detected = ttk.Treeview(dframe, columns=("time", "ref", "snippet"), show="headings",
                                      selectmode="browse", height=6)
         for col, title, width, stretch in (("time", "Time", 70, False), ("ref", "Reference", 140, False),
@@ -219,13 +230,11 @@ class OperatorWindow(object):
         thumbs.pack(fill="x", padx=(6, 0))
         thumbs.columnconfigure(0, weight=1, uniform="t")
         thumbs.columnconfigure(1, weight=1, uniform="t")
-        ttk.Label(thumbs, text="PREVIEW", font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(thumbs, text="LIVE", font=("TkDefaultFont", 10, "bold"), foreground="#b00020").grid(
+        ttk.Label(thumbs, text="PREVIEW", style="PreviewHead.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(thumbs, text=u"\u25cf LIVE", style="LiveHead.TLabel").grid(
             row=0, column=1, sticky="w", padx=(6, 0))
-        self.preview_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2,
-                                        highlightbackground="#4a7bd0", height=120)
-        self.live_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2,
-                                     highlightbackground="#d02040", height=120)
+        self.preview_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2, height=120)
+        self.live_canvas = tk.Canvas(thumbs, background="#000000", highlightthickness=2, height=120)
         self.preview_canvas.grid(row=1, column=0, sticky="ew")
         self.live_canvas.grid(row=1, column=1, sticky="ew", padx=(6, 0))
         self.preview_label = ttk.Label(thumbs, text="—")
@@ -240,19 +249,22 @@ class OperatorWindow(object):
         for col in range(4):
             buttons.columnconfigure(col, weight=1, uniform="b")
         ttk.Button(buttons, text="◀ Prev", command=lambda: self.step(-1)).grid(row=0, column=0, sticky="ew")
-        self.golive_btn = ttk.Button(buttons, text="GO LIVE ▶", command=self.go_live)
+        self.golive_btn = ttk.Button(buttons, text="GO LIVE ▶", command=self.go_live, style="Accent.TButton")
         self.golive_btn.grid(row=0, column=1, columnspan=2, sticky="ew", padx=4)
         ttk.Button(buttons, text="Next ▶", command=lambda: self.step(1)).grid(row=0, column=3, sticky="ew")
         ttk.Button(buttons, text="BLANK (Esc)", command=self.blank).grid(
             row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
         ttk.Button(buttons, text="BLACK (Shift+Esc)", command=self.black).grid(
             row=1, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(2, 0))
-        self.follow_btn = ttk.Button(buttons, text="Pause following (F6)", command=self.toggle_following)
-        self.follow_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0), padx=(0, 2))
+        self.follow_btn = ttk.Button(buttons, text=u"\u23f8 Pause", command=self.toggle_following,
+                                     style="Small.TButton")
+        self.follow_btn.grid(row=2, column=0, sticky="ew", pady=(4, 0), padx=(0, 2))
+        ttk.Button(buttons, text=u"\u270e Mark", command=self.open_emphasis, style="Small.TButton").grid(
+            row=2, column=1, sticky="ew", pady=(4, 0), padx=(2, 2))
         self.follow_label = tk.Label(buttons, text="", anchor="w")
         self.follow_label.grid(row=2, column=2, columnspan=2, sticky="ew", pady=(4, 0), padx=(4, 0))
 
-        sframe = ttk.LabelFrame(right, text="Search", padding=4)
+        sframe = ttk.LabelFrame(right, text="SEARCH", padding=6)
         sframe.pack(fill="both", expand=True, padx=(6, 0))
         srow = ttk.Frame(sframe)
         srow.pack(fill="x")
@@ -263,7 +275,7 @@ class OperatorWindow(object):
         self.search_entry.bind("<KP_Enter>", lambda e: self.search())
         ttk.Button(srow, text="Find", command=self.search).pack(side="left", padx=(4, 0))
         self.search_info = ttk.Label(sframe, text="Type a reference (jn 3:16, 1 cor 13 4-7) or words "
-                                                  "(for god so loved)", foreground="#666666")
+                                                  "(for god so loved)", style="CardMuted.TLabel")
         self.search_info.pack(fill="x", pady=(2, 2))
         rframe = ttk.Frame(sframe)
         rframe.pack(fill="both", expand=True)
@@ -283,10 +295,14 @@ class OperatorWindow(object):
 
         self._update_translation_name()
         self._update_mode_hint()
+        self._apply_theme_to_tk()
 
     def _bind_keys(self) -> None:
         r = self.root
         r.bind_all("<F6>", lambda e: self._key(self.toggle_following))
+        r.bind_all("<%s-e>" % MOD, lambda e: self._key(self.open_emphasis))
+        r.bind_all("<%s-Shift-S>" % MOD, lambda e: self._key(self.open_summary))
+        r.bind_all("<%s-Shift-s>" % MOD, lambda e: self._key(self.open_summary))
         for seq in ("<%s-Return>" % MOD, "<%s-KP_Enter>" % MOD, "<F5>"):
             r.bind_all(seq, lambda e: self._key(self.go_live))
         r.bind_all("<Escape>", lambda e: self._key(self.blank))
@@ -420,6 +436,8 @@ class OperatorWindow(object):
             self.start_listening()
 
     def start_listening(self) -> None:
+        if self.sermon is None or time.time() - self.sermon.ended > 30 * 60:
+            self.new_sermon(quiet=True)  # a new service: start a fresh sermon record
         if self.engine.state in ("missing", "error"):
             self._status("No speech model — see the yellow banner", error=True)
             return
@@ -464,6 +482,7 @@ class OperatorWindow(object):
             self.audio_retry_at = time.monotonic() + 3
 
     def stop_listening(self) -> None:
+        self._save_sermon()
         self.listening = False
         self.capture.stop()
         self.engine.stop()
@@ -473,7 +492,7 @@ class OperatorWindow(object):
 
     def _update_listen_ui(self) -> None:
         if self.listening:
-            self.listen_dot.configure(foreground="#e01010")
+            self.listen_dot.configure(foreground=self.pal["live"])
             self.listen_btn.configure(text="Stop")
             if self.engine.state == "loading":
                 self._status("Loading speech model…")
@@ -483,7 +502,7 @@ class OperatorWindow(object):
             elif self.capture.opening:
                 self._status("Opening audio device\u2026")
         else:
-            self.listen_dot.configure(foreground="#888888")
+            self.listen_dot.configure(foreground=self.pal["muted"])
             self.listen_btn.configure(text="Listen")
             idle = "Idle \u2014 %s" % self.engine.model_label if self.engine.model_label else "Idle"
             self._status({"loading": "Loading speech model…", "missing": "No speech model",
@@ -528,6 +547,8 @@ class OperatorWindow(object):
             if self._tick % 20 == 0:
                 self._audio_watchdog()
                 self._prune_transcript()
+            if self._tick % 100 == 50 and self.settings["ui_theme"] == "system":
+                self._check_theme()
             if self._tick % 100 == 0 and self._displays_changed():
                 log.info("display configuration changed")
                 self.refresh_displays()
@@ -601,6 +622,44 @@ class OperatorWindow(object):
             messagebox.showerror(APP_NAME, "The model pack could not be installed:\n\n%s" % detail,
                                  parent=self.root)
 
+    # -- look ------------------------------------------------------------------------
+    def _wanted_theme(self) -> str:
+        forced = os.environ.get("BIVERSE_THEME") or self.settings["ui_theme"]
+        return forced if forced in ("dark", "light") else self._theme.system_mode()
+
+    def _check_theme(self) -> None:
+        mode = self._wanted_theme()
+        if mode != self.theme_mode:
+            self.set_theme(mode)
+
+    def set_theme(self, mode: str) -> None:
+        self.theme_mode = mode
+        self.pal = self._theme.apply(self.root, mode)
+        self._apply_theme_to_tk()
+        self._update_listen_ui()
+        self._update_mode_hint()
+        self._update_follow_ui()
+
+    def _apply_theme_to_tk(self) -> None:
+        """Colours for plain tk widgets (ttk ones follow the style)."""
+        p = self.pal
+        self.banner.configure(background=p["banner_bg"], foreground=p["banner_fg"])
+        self.meter.configure(background=p["meter_bg"])
+        for w in (self.listen_dot, self.status_label, self.follow_label):
+            w.configure(background=p["bg"])
+        self.status_label.configure(foreground=p["error"] if self._status_error else p["text"])
+        self.transcript.configure(background=p["surface"], foreground=p["text"], insertbackground=p["text"],
+                                  selectbackground=p["select"])
+        self.transcript.tag_configure("partial", foreground=p["partial"])
+        self.transcript.tag_configure("time", foreground=p["muted"])
+        self.preview_canvas.configure(highlightbackground=p["accent"])
+        self.live_canvas.configure(highlightbackground=p["live"])
+        style = ttk.Style(self.root)
+        style.configure("PreviewHead.TLabel", background=p["bg"], foreground=p["accent"],
+                        font=("TkDefaultFont", 10, "bold"))
+        style.configure("LiveHead.TLabel", background=p["bg"], foreground=p["live"], font=("TkDefaultFont", 10, "bold"))
+        style.configure("Live.TLabel", background=p["bg"], foreground=p["live"])
+
     def _set_banner(self, text: str) -> None:
         if text:
             self.banner.configure(text=text)
@@ -611,7 +670,8 @@ class OperatorWindow(object):
 
     def _status(self, text: str, error: bool = False) -> None:
         self.status_var.set(text)
-        self.status_label.configure(foreground="#c00000" if error else self._status_fg)
+        self._status_error = error
+        self.status_label.configure(foreground=self.pal["error"] if error else self.pal["text"])
 
     # transcript
     def _insert_transcript(self, fn) -> None:
@@ -640,6 +700,8 @@ class OperatorWindow(object):
         self._insert_transcript(f)
 
     def _add_final(self, text: str) -> None:
+        if self.sermon is not None:
+            self.sermon.add_line(text)
         def f(t):
             ranges = t.tag_ranges("partial")
             if ranges:
@@ -678,6 +740,8 @@ class OperatorWindow(object):
             self.detected.move(iid, "", 0)
         self._detections[iid] = sel
         log.info("detected %s (%s): %r", label, kind, det.snippet)
+        if self.sermon is not None:
+            self.sermon.add_ref(sel.passage_label())
         from .parser import AUTO_MIN_CONFIDENCE
         auto_ok = (self.mode_var.get() == "auto" and ref.confidence >= AUTO_MIN_CONFIDENCE
                    and (ref.explicit_verse or not self.settings["auto_requires_verse"]))
@@ -719,6 +783,9 @@ class OperatorWindow(object):
         self._last_command = (intent, channel, t)
         label = intent.label()
         log.info("voice intent %s (%s): %r", label, channel, heard)
+        if intent.kind == commands.TRANSLATION:
+            self._voice_translation(intent)
+            return
         if intent.kind in (commands.STOP, commands.RESUME):
             self.set_following(intent.kind == commands.RESUME, source="voice")
             return
@@ -738,6 +805,20 @@ class OperatorWindow(object):
         else:
             self.set_preview(new)
             self._status("Voice: %s \u2192 %s in Preview (press Go Live)" % (label, new.verse_label()))
+
+    def _voice_translation(self, intent) -> None:
+        """"Let's read this in the ASV": switch the Bible version (stays until changed)."""
+        if not intent.code:
+            have = ", ".join(c for c, _n, _l in self.bible.translations())
+            self._status("Heard a request for the %s, which is not installed (installed: %s)" % (intent.where, have),
+                         error=True)
+            return
+        if intent.code == self.translation():
+            self._status("Already showing the %s" % intent.code)
+            return
+        self.translation_var.set(intent.code)
+        self._on_translation()
+        self._status("Voice: switched to %s" % intent.code)
 
     def _navigate(self, base: Selection, intent) -> Optional[Selection]:
         if intent.kind == commands.STEP:
@@ -813,15 +894,15 @@ class OperatorWindow(object):
 
     def _update_follow_ui(self) -> None:
         if not self.settings["follow_reading"]:
-            text, color = "Following off (Settings)", "#888888"
+            text, color = "Following off (Settings)", self.pal["muted"]
         elif not self.following:
-            text, color = u"\u2016 Paused \u2014 say \"continue\"", "#c07000"
+            text, color = u"\u2016 Paused \u2014 say \"continue\"", self.pal["warn"]
         elif self.live.selection is None or self.live.cover is not None:
-            text, color = u"\u25cf Following (waiting for a verse)", "#888888"
+            text, color = u"\u25cf Following (waiting for a verse)", self.pal["muted"]
         else:
-            text, color = u"\u25cf Following  %d%%" % int(100 * self.follower.progress), "#1a8f3a"
+            text, color = u"\u25cf Following  %d%%" % int(100 * self.follower.progress), self.pal["ok"]
         self.follow_label.configure(text=text, foreground=color)
-        self.follow_btn.configure(text="Pause following (F6)" if self.following else "Resume following (F6)")
+        self.follow_btn.configure(text=u"\u23f8 Pause" if self.following else u"\u25b6 Resume")
 
     def go_live(self) -> None:
         if self.preview is None:
@@ -964,10 +1045,10 @@ class OperatorWindow(object):
 
     def _update_mode_hint(self) -> None:
         if self.mode_var.get() == "auto":
-            self.mode_hint.configure(text="Auto: detected verses go straight to Live", foreground="#b00020")
+            self.mode_hint.configure(text="Auto: detected verses go straight to Live", style="Live.TLabel")
         else:
             self.mode_hint.configure(text="Manual: detected verses go to Preview; press Go Live (%s+Enter / F5)"
-                                     % MOD_LABEL, foreground="#666666")
+                                     % MOD_LABEL, style="Muted.TLabel")
 
     def toggle_output(self) -> None:
         self.output.toggle()
@@ -990,8 +1071,52 @@ class OperatorWindow(object):
         c.delete("bar")
         fill = int(w * level / 100.0)
         if fill > 0:
-            color = "#2fbf3a" if level < 75 else ("#e0c020" if level < 92 else "#e03030")
+            color = self.pal["ok"] if level < 75 else (self.pal["warn"] if level < 92 else self.pal["error"])
             c.create_rectangle(0, 0, fill, h, fill=color, width=0, tags="bar")
+
+    # -- sermon record and summary ----------------------------------------------------
+    def new_sermon(self, quiet: bool = False) -> None:
+        from .summary import SermonLog
+        self._save_sermon()
+        self.sermon = SermonLog()
+        if not quiet:
+            self._status("Started a new sermon record")
+
+    def _save_sermon(self) -> None:
+        if self.sermon is not None and not self.sermon.empty():
+            try:
+                self.sermon.save()
+            except OSError:
+                log.exception("could not save the sermon record")
+
+    def open_summary(self, sermon=None) -> None:
+        from .summary import SermonLog
+        from .ui_summary import SummaryWindow
+        SummaryWindow(self, sermon or self.sermon or SermonLog())
+
+    def open_previous_sermon(self) -> None:
+        import json as _json
+        from tkinter import filedialog
+
+        from .summary import SermonLog
+        path = filedialog.askopenfilename(parent=self.root, title="Open a sermon record",
+                                          initialdir=os.path.join(paths.config_dir(), "sermons"),
+                                          filetypes=[("Sermon records", "*.json")])
+        if path:
+            try:
+                with open(path, encoding="utf-8") as f:
+                    self.open_summary(SermonLog.from_dict(_json.load(f)))
+            except (OSError, ValueError) as exc:
+                messagebox.showerror(APP_NAME, "That file could not be opened:\n%s" % exc, parent=self.root)
+
+    def open_emphasis(self) -> None:
+        """Bold / underline / highlight words of the live verse (or the preview)."""
+        from .ui_emphasis import EmphasisDialog
+        sel = self.live.selection or self.preview
+        if sel is None:
+            self._status("Nothing to emphasise yet: show a verse first", error=True)
+            return
+        EmphasisDialog(self, sel.book, sel.chapter, sel.cur, self.translation())
 
     def open_settings(self) -> None:
         from .ui_settings import SettingsDialog
@@ -1066,5 +1191,6 @@ class OperatorWindow(object):
         except Exception:
             log.exception("stopping audio")
         self.settings.save()
+        self._save_sermon()
         self.output.destroy()
         self.root.destroy()

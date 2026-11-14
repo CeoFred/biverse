@@ -15,7 +15,7 @@ def _isolated_config(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="session")
 def bible():
-    from versecast.bible import Bible
+    from biverse.bible import Bible
     if not os.path.exists(DB_PATH):
         if os.environ.get("BIVERSE_REQUIRE_DB"):
             pytest.fail("data/bible.db missing; run tools/build_bible_db.py")

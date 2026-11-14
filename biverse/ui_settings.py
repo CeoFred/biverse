@@ -16,6 +16,7 @@ class SettingsDialog(object):
         a = s.appearance
         self.win = tk.Toplevel(op.root)
         self.win.title("Settings")
+        self.win.configure(background=op.pal["bg"])
         self.win.transient(op.root)
         self.win.resizable(False, False)
 
@@ -27,12 +28,15 @@ class SettingsDialog(object):
         nb.add(ap, text="Appearance")
         self.bg = tk.StringVar(value=a.background)
         self.fg = tk.StringVar(value=a.foreground)
+        self.hl = tk.StringVar(value=a.highlight_color)
         self.family = tk.StringVar(value=a.font_family or op.renderer.family(a))
         self.bold = tk.BooleanVar(value=a.bold)
         self.shadow = tk.BooleanVar(value=a.shadow)
         self.refpos = tk.StringVar(value=a.reference_position)
         self.image = tk.StringVar(value=a.background_image)
         self.fit_range = tk.BooleanVar(value=s["fit_range"])
+        self.ui_theme = tk.StringVar(value={"system": "Follow the computer", "dark": "Dark",
+                                            "light": "Light"}[s["ui_theme"]])
 
         row = 0
         ttk.Label(ap, text="Background colour").grid(row=row, column=0, sticky="w", pady=2)
@@ -45,6 +49,12 @@ class SettingsDialog(object):
         self.fg_swatch = tk.Label(ap, width=4, background=self.fg.get(), relief="solid", borderwidth=1)
         self.fg_swatch.grid(row=row, column=1, sticky="w")
         ttk.Button(ap, text="Choose…", command=lambda: self._color(self.fg, self.fg_swatch)).grid(
+            row=row, column=2, sticky="w")
+        row += 1
+        ttk.Label(ap, text="Highlight colour").grid(row=row, column=0, sticky="w", pady=2)
+        self.hl_swatch = tk.Label(ap, width=4, background=self.hl.get(), relief="solid", borderwidth=1)
+        self.hl_swatch.grid(row=row, column=1, sticky="w")
+        ttk.Button(ap, text="Choose\u2026", command=lambda: self._color(self.hl, self.hl_swatch)).grid(
             row=row, column=2, sticky="w")
         row += 1
         ttk.Label(ap, text="Font").grid(row=row, column=0, sticky="w", pady=2)
@@ -70,10 +80,15 @@ class SettingsDialog(object):
         ttk.Button(bi, text="Clear", command=lambda: self.image.set("")).pack(side="left")
         row += 1
         ttk.Label(ap, text="PNG or GIF. Use an image the size of the projector for best results.",
-                  foreground="#666666").grid(row=row, column=0, columnspan=3, sticky="w")
+                  style="Muted.TLabel").grid(row=row, column=0, columnspan=3, sticky="w")
         row += 1
         ttk.Checkbutton(ap, text="Fit a whole verse range on one slide when it fits",
                         variable=self.fit_range).grid(row=row, column=0, columnspan=3, sticky="w", pady=(6, 0))
+        row += 1
+        ttk.Label(ap, text="Operator window look").grid(row=row, column=0, sticky="w", pady=(10, 2))
+        ttk.Combobox(ap, textvariable=self.ui_theme, state="readonly", width=20,
+                     values=["Follow the computer", "Dark", "Light"]).grid(row=row, column=1, columnspan=2,
+                                                                           sticky="w", pady=(10, 2))
 
         # -- speech
         sp = ttk.Frame(nb, padding=10)
@@ -98,7 +113,7 @@ class SettingsDialog(object):
         for row, (value, text, note) in enumerate(choices, 1):
             ttk.Radiobutton(sp, text=text, value=value, variable=self.speech_model).grid(
                 row=row, column=0, sticky="w")
-            ttk.Label(sp, text=note, foreground="#666666").grid(row=row, column=1, columnspan=2, sticky="w",
+            ttk.Label(sp, text=note, style="Muted.TLabel").grid(row=row, column=1, columnspan=2, sticky="w",
                                                                 padx=(8, 0))
         row = len(choices) + 1
         folder = ttk.Frame(sp)
@@ -110,8 +125,8 @@ class SettingsDialog(object):
         row += 1
         ttk.Button(sp, text="Install model pack\u2026", command=self._install_pack).grid(
             row=row, column=0, sticky="w")
-        ttk.Label(sp, text="For the Parakeet pack zip from the BiVerse download page. Needs a 64-bit computer "
-                           "with about 6 GB of RAM or more.", wraplength=330, foreground="#666666").grid(
+        ttk.Label(sp, text="For the Parakeet pack zip from the Biverse download page. Needs a 64-bit computer "
+                           "with about 6 GB of RAM or more.", wraplength=330, style="Muted.TLabel").grid(
             row=row, column=1, columnspan=2, sticky="w", padx=(8, 0))
 
         # -- detection
@@ -137,13 +152,13 @@ class SettingsDialog(object):
                         variable=self.voice_cmds).grid(row=6, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Label(dt, text="Auto mode moves the live verse; Manual mode puts it in Preview. \"Next\" and "
                            "\"go back\" on their own only count as a short command, not inside a sentence.",
-                  foreground="#666666", wraplength=420).grid(row=7, column=0, columnspan=2, sticky="w")
+                  style="Muted.TLabel", wraplength=420).grid(row=7, column=0, columnspan=2, sticky="w")
         ttk.Checkbutton(dt, text="Follow the reading: move to the next verse as the preacher finishes each one",
                         variable=self.follow).grid(row=8, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Checkbutton(dt, text="Extra reference listener (classic engine only; about twice the CPU)",
                         variable=self.ref_rec).grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 2))
         ttk.Label(dt, text="Turn off on very slow computers. It only adds references that include both a "
-                           "chapter and a verse.", foreground="#666666", wraplength=420).grid(
+                           "chapter and a verse.", style="Muted.TLabel", wraplength=420).grid(
             row=5, column=0, columnspan=2, sticky="w")
 
         btns = ttk.Frame(self.win, padding=(8, 0, 8, 8))
@@ -173,12 +188,12 @@ class SettingsDialog(object):
             self.model_path.set(path)
             self.speech_model.set("custom")
             if recognizer.detect_model(path) is None:
-                messagebox.showwarning("Speech model", "That folder does not look like a speech model BiVerse "
+                messagebox.showwarning("Speech model", "That folder does not look like a speech model Biverse "
                                        "can use (a Vosk model, or a sherpa-onnx model with biverse-model.json).",
                                        parent=self.win)
 
     def _install_pack(self) -> None:
-        path = filedialog.askopenfilename(parent=self.win, title="Choose the BiVerse model pack",
+        path = filedialog.askopenfilename(parent=self.win, title="Choose the Biverse model pack",
                                           filetypes=[("Model pack", "*.zip"), ("All files", "*")])
         if path:
             self._ok()
@@ -189,6 +204,7 @@ class SettingsDialog(object):
         a = s.appearance
         a.background = self.bg.get()
         a.foreground = self.fg.get()
+        a.highlight_color = self.hl.get()
         a.font_family = self.family.get()
         a.bold = bool(self.bold.get())
         a.shadow = bool(self.shadow.get())
@@ -196,6 +212,8 @@ class SettingsDialog(object):
         a.background_image = self.image.get().strip()
         s.appearance = a
         s["fit_range"] = bool(self.fit_range.get())
+        s["ui_theme"] = {"Follow the computer": "system", "Dark": "dark", "Light": "light"}[self.ui_theme.get()]
+        self.op._check_theme()
         s["strict_books"] = bool(self.strict.get())
         s["relative_verses"] = bool(self.relative.get())
         try:

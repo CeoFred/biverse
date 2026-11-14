@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from versecast import bible_import
-from versecast.parser import parse_typed
+from biverse import bible_import
+from biverse.parser import parse_typed
 
 KJV_JOHN_3_16 = ("For God so loved the world, that he gave his only begotten Son, that whosoever "
                  "believeth in him should not perish, but have everlasting life.")
@@ -111,7 +111,7 @@ def _fake_rows(text="x"):
 
 
 def test_import_translation_into_user_db(tmp_path):
-    from versecast.bible import Bible
+    from biverse.bible import Bible
     main = str(tmp_path / "main.db")
     user = str(tmp_path / "user.db")
     conn = sqlite3.connect(main)

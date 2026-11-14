@@ -1,6 +1,6 @@
-# BiVerse user guide
+# Biverse user guide
 
-BiVerse listens to the preacher. When it hears a Bible reference ("John chapter three verse
+Biverse listens to the preacher. When it hears a Bible reference ("John chapter three verse
 sixteen"), it puts the verse on the projector or TV. It is free, needs no internet and sends
 nothing anywhere.
 
@@ -14,8 +14,9 @@ This guide is written for church volunteers. You do not need to be technical.
 - [6. Searching](#6-searching)
 - [7. Keyboard shortcuts](#7-keyboard-shortcuts)
 - [8. Settings](#8-settings)
-- [9. Installing a bigger speech model](#9-installing-a-bigger-speech-model)
+- [9. Speech models: getting the best recognition](#9-speech-models-getting-the-best-recognition)
 - [10. Adding a licensed translation](#10-adding-a-licensed-translation)
+- [Bible versions, emphasis and the sermon summary](#bible-versions-emphasis-and-the-sermon-summary)
 - [11. Troubleshooting](#11-troubleshooting)
 
 ---
@@ -26,12 +27,12 @@ Download the right file from the project's **Releases** page.
 
 | Your computer | Download |
 |---|---|
-| Windows 10 or 11 (almost all PCs from the last 10 years) | `BiVerse-…-windows-x64.zip` |
-| Windows 7 or 8, 64-bit | `BiVerse-…-windows-legacy-x64.zip` |
-| Windows 7 or 8, 32-bit (older netbooks) | `BiVerse-…-windows-legacy-x86.zip` |
-| Mac with Apple Silicon (M1, M2, M3, M4…) | `BiVerse-…-macos-arm.zip` |
-| Mac with an Intel processor, macOS 10.15 or newer | `BiVerse-…-macos-intel.zip` (also runs on Apple Silicon) |
-| Optional, for the best recognition (see section 9) | `BiVerse-model-pack-parakeet-….zip` |
+| Windows 10 or 11 (almost all PCs from the last 10 years) | `Biverse-…-windows-x64.zip` |
+| Windows 7 or 8, 64-bit | `Biverse-…-windows-legacy-x64.zip` |
+| Windows 7 or 8, 32-bit (older netbooks) | `Biverse-…-windows-legacy-x86.zip` |
+| Mac with Apple Silicon (M1, M2, M3, M4…) | `Biverse-…-macos-arm.zip` |
+| Mac with an Intel processor, macOS 10.15 or newer | `Biverse-…-macos-intel.zip` (also runs on Apple Silicon) |
+| Optional, for the best recognition (see section 9) | `Biverse-model-pack-parakeet-….zip` |
 
 To check your Windows type: **Start → right-click Computer / This PC → Properties**, then look
 at "System type". To check your Mac: **Apple menu → About This Mac**, then look at "Chip" or
@@ -41,13 +42,13 @@ at "System type". To check your Mac: **Apple menu → About This Mac**, then loo
 
 1. Right-click the zip file and choose **Extract All…**. Put the folder somewhere permanent,
    such as `Documents`.
-2. Open the `BiVerse` folder and double-click **BiVerse.exe**. Keep the whole folder together,
+2. Open the `Biverse` folder and double-click **Biverse.exe**. Keep the whole folder together,
    because the program needs the files next to it.
 3. If Windows shows "Windows protected your PC", click **More info → Run anyway**. This
    happens because the program is free and not code-signed.
-4. Optional: right-click `BiVerse.exe` and choose **Send to → Desktop (create shortcut)**.
+4. Optional: right-click `Biverse.exe` and choose **Send to → Desktop (create shortcut)**.
 
-**Windows 7 needs two things first.** Without them BiVerse will not start (you may see an
+**Windows 7 needs two things first.** Without them Biverse will not start (you may see an
 error about `api-ms-win-crt-runtime`):
 
 - **Service Pack 1.** Check under Computer → Properties. If it does not say "Service Pack 1",
@@ -58,14 +59,14 @@ error about `api-ms-win-crt-runtime`):
 
 ### macOS
 
-1. Double-click the zip file. This makes **BiVerse.app**. Drag it into **Applications**.
-2. The first time, **right-click (or Control-click) BiVerse.app and choose Open**, then click
+1. Double-click the zip file. This makes **Biverse.app**. Drag it into **Applications**.
+2. The first time, **right-click (or Control-click) Biverse.app and choose Open**, then click
    **Open** again. The app is not signed by Apple, so a normal double-click will refuse to
    open it the first time.
    - On macOS 15 and later, if there is no Open button: try to open the app once, then go to
      **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
    - If macOS says the app "is damaged", open **Terminal** and run:
-     `xattr -dr com.apple.quarantine /Applications/BiVerse.app`
+     `xattr -dr com.apple.quarantine /Applications/Biverse.app`
 3. When you first press **Listen**, macOS asks for permission to use the microphone. Click
    **OK**.
 
@@ -73,8 +74,8 @@ error about `api-ms-win-crt-runtime`):
 
 ## 2. Connecting the projector
 
-BiVerse shows the verse on a **second screen**: the projector or TV. Your laptop screen keeps
-the BiVerse controls.
+Biverse shows the verse on a **second screen**: the projector or TV. Your laptop screen keeps
+the Biverse controls.
 
 ### Windows
 
@@ -89,9 +90,9 @@ the BiVerse controls.
 3. Make sure the projector is **not mirrored**. On older macOS, untick "Mirror Displays" in
    the **Arrangement** tab. On newer macOS, set "Use as" to **Extended display**.
 
-### In BiVerse
+### In Biverse
 
-- **Output:** choose the projector, for example `Display 2 — 1920×1080`. BiVerse picks the
+- **Output:** choose the projector, for example `Display 2 — 1920×1080`. Biverse picks the
   first screen that is not your main screen automatically.
 - Press **Show output**. The projector turns black, which is normal: nothing appears until
   you send a verse live.
@@ -134,19 +135,19 @@ If the sermon audio is already on the computer (a livestream, or a video being p
 
 - **Windows: "Stereo Mix".** Right-click the speaker icon, choose **Sounds → Recording**,
   right-click in the empty space, tick **Show Disabled Devices**, then right-click
-  **Stereo Mix** and choose **Enable**. Then choose *Stereo Mix* in BiVerse. Not every PC has
+  **Stereo Mix** and choose **Enable**. Then choose *Stereo Mix* in Biverse. Not every PC has
   it.
 - **Windows: VB-Cable** (free, from vb-audio.com). Install it, set the livestream software or
-  player to output to *CABLE Input*, and choose **CABLE Output** in BiVerse.
+  player to output to *CABLE Input*, and choose **CABLE Output** in Biverse.
 - **macOS: BlackHole** (free, from existential.audio). Install *BlackHole 2ch*, send the
-  livestream audio to BlackHole, and choose **BlackHole 2ch** in BiVerse. To hear the audio
+  livestream audio to BlackHole, and choose **BlackHole 2ch** in Biverse. To hear the audio
   at the same time, make a **Multi-Output Device** in *Audio MIDI Setup*.
 
 ---
 
 ## 4. Running a service
 
-1. Start BiVerse. Wait until the status no longer says "Loading speech model…". This takes a
+1. Start Biverse. Wait until the status no longer says "Loading speech model…". This takes a
    few seconds.
 2. Check **Input**, **Output** and **Bible** (the translation).
 3. Press **Listen** (or Ctrl+L / Cmd+L). The dot turns **red** and the status says
@@ -162,7 +163,7 @@ If the sermon audio is already on the computer (a livestream, or a video being p
 
 In **Detected**, click an entry to preview it again, or double-click it to send it live.
 
-**References BiVerse understands**
+**References Biverse understands**
 
 - "John three sixteen", "John chapter three verse sixteen", "John three colon sixteen"
 - Ranges: "First Corinthians thirteen four through seven", "verses four to seven"
@@ -175,7 +176,7 @@ In **Detected**, click an entry to preview it again, or double-click it to send 
   on with Next. The entry in Detected is marked *(relative)*.
 
 **Voice commands** (Settings → Detection, on by default). The preacher can move the slide by
-voice, in their own words. Some examples BiVerse understands:
+voice, in their own words. Some examples Biverse understands:
 
 | The preacher says | What happens |
 |---|---|
@@ -189,7 +190,7 @@ voice, in their own words. Some examples BiVerse understands:
 | "back to where we started" | the first verse of the passage you sent live |
 | "stop there", "let's stop there" / "continue", "let's continue", "read on" | pause / resume following the reading |
 
-**Following the reading.** Once a verse or passage is live (for example Genesis 10:3–10), BiVerse
+**Following the reading.** Once a verse or passage is live (for example Genesis 10:3–10), Biverse
 listens to the preacher reading it and moves to the next verse as they reach the end of each
 one, typically within about a third of a second. It works even if the preacher reads from a
 different translation from the one on screen, and it handles skipped verses. At the end of a
@@ -207,7 +208,7 @@ moves the live slide in both Manual and Auto mode, because you already approved 
 In **Auto** mode voice commands change the projector straight away. In **Manual** mode the new
 verse goes to Preview for you to send live. Ordinary sentences do nothing: "next week we have a retreat",
 "go back to Egypt", "let's continue to worship" and "the chapter of your life" are ignored.
-The Status line shows what BiVerse heard and did.
+The Status line shows what Biverse heard and did.
 
 ---|---|
 | "next verse", "the following verse", or just "Next." | next verse |
@@ -219,7 +220,7 @@ The Status line shows what BiVerse heard and did.
 In **Auto** mode the projector changes straight away. In **Manual** mode the new verse goes to
 Preview for you to send live. "Next" and "go back" on their own only count when said as a short
 command, so "next week we have a retreat" or "go back to Egypt" do nothing. The Status line
-shows each command BiVerse heard.
+shows each command Biverse heard.
 - Names that are also everyday words (Mark, John, Job, Acts, James, Jude, Ruth, Joel, Amos,
   Titus, Numbers, Judges) only count with a chapter **and** a verse, or with the word
   "chapter". So "I lost my job three years ago" is ignored, but "Job nineteen twenty five" is
@@ -238,7 +239,7 @@ Switch modes at any time with the Mode buttons or **Ctrl+M / Cmd+M**.
 
 **When to trust Auto mode:** when the sound feed is clean (from the desk), the preacher reads
 references clearly, and a wrong verse on screen for a few seconds would not matter. In Auto
-mode, BiVerse only sends a reference live when both a chapter **and** a verse were heard
+mode, Biverse only sends a reference live when both a chapter **and** a verse were heard
 ("Romans eight" alone goes to Preview). You can change this in Settings → Detection. Run a
 rehearsal before relying on it.
 
@@ -269,6 +270,8 @@ On a Mac, use Cmd instead of Ctrl.
 | Ctrl+L | Listen on/off |
 | Ctrl+M | Manual / Auto |
 | F6 | Pause / resume following the reading |
+| Ctrl+E | Emphasis: bold / underline / highlight words of the verse |
+| Ctrl+Shift+S | Sermon summary |
 | F11 (on the output window) | Full screen / window |
 
 ---
@@ -288,14 +291,14 @@ Open **⚙ Settings**.
   references it mishears. It roughly doubles the CPU used for listening.
 - **Test output** shows a sample verse on the projector.
 
-BiVerse remembers everything (devices, display, translation, mode and appearance) for next
+Biverse remembers everything (devices, display, translation, mode and appearance) for next
 time.
 
 ---
 
 ## 9. Speech models: getting the best recognition
 
-BiVerse can use three speech models. **Settings → Speech** shows which one is in use.
+Biverse can use three speech models. **Settings → Speech** shows which one is in use.
 
 | Model | Best for | Needs |
 |---|---|---|
@@ -309,23 +312,23 @@ In tests with Nigerian English speakers, Parakeet got about 1 word in 14 wrong; 
 
 **Installing the Parakeet pack (recommended if your computer can run it):**
 
-1. On any computer with internet, download `BiVerse-model-pack-parakeet-….zip` (about 500 MB)
-   from the same Releases page as BiVerse. Copy it to the church computer if needed.
-2. In BiVerse, open **Settings → Speech → Install model pack…** and choose the zip.
-3. Wait for "installed" (about a minute). With the model set to **Automatic**, BiVerse now uses
+1. On any computer with internet, download `Biverse-model-pack-parakeet-….zip` (about 500 MB)
+   from the same Releases page as Biverse. Copy it to the church computer if needed.
+2. In Biverse, open **Settings → Speech → Install model pack…** and choose the zip.
+3. Wait for "installed" (about a minute). With the model set to **Automatic**, Biverse now uses
    Parakeet whenever the computer can run it, and falls back to Kroko otherwise.
 
-The pack is kept in your settings folder, so it survives BiVerse updates. To force a particular
+The pack is kept in your settings folder, so it survives Biverse updates. To force a particular
 model, choose it in Settings → Speech.
 
 **Other models.** Settings → Speech → "A model folder I choose" accepts a Vosk model folder
-(from alphacephei.com/vosk/models) or a folder prepared by BiVerse's `tools/fetch_model.py`.
+(from alphacephei.com/vosk/models) or a folder prepared by Biverse's `tools/fetch_model.py`.
 
 ---
 
 ## 10. Adding a licensed translation
 
-BiVerse includes only public-domain translations: KJV, WEB, ASV, YLT and BBE. Modern
+Biverse includes only public-domain translations: KJV, WEB, ASV, YLT and BBE. Modern
 translations such as the NIV, NKJV, ESV and NLT are copyrighted. If your church holds a
 licence to display one and has the text as a file, you can add it yourself. It stays on your
 computer only.
@@ -340,13 +343,48 @@ computer only.
    *Book* is 1–66 (Genesis = 1, Revelation = 66). Book names in Bible order also work,
    for example `Genesis` or `I Samuel`.
 2. Import it:
-   - Windows: `BiVerse.exe --import-translation NIV "New International Version" niv.csv`
-     (run it from a Command Prompt in the BiVerse folder)
-   - macOS: `/Applications/BiVerse.app/Contents/MacOS/BiVerse --import-translation NIV "New International Version" niv.csv`
+   - Windows: `Biverse.exe --import-translation NIV "New International Version" niv.csv`
+     (run it from a Command Prompt in the Biverse folder)
+   - macOS: `/Applications/Biverse.app/Contents/MacOS/Biverse --import-translation NIV "New International Version" niv.csv`
    - From source: `python tools/import_translation.py NIV "New International Version" niv.csv`
-3. Restart BiVerse. The new code appears in the **Bible** list.
+3. Restart Biverse. The new code appears in the **Bible** list.
 
 To remove it, run `python tools/import_translation.py NIV x x --remove`.
+
+---
+
+## Bible versions, emphasis and the sermon summary
+
+**Changing the Bible version by voice.** The preacher can say "let's read this in the ASV",
+"switch to the King James", "World English please" or "can we see that in Young's Literal". The
+projector switches at once and **stays on that version until it is changed again** (by voice or
+the Bible list). If the version isn't installed (for example "the NIV"), the Status line says so
+and lists the installed ones. Quoting a version ("the King James version says…") does not switch.
+
+**Emphasis: bold, underline or highlight words.** Press **✎ Mark** (or Ctrl+E / Cmd+E) while
+a verse is live or in Preview. Select words in the window that opens and press **Bold**,
+**Underline** or **Highlight**; press again to remove. The projector updates immediately. Marks are
+remembered for that verse in that version, so they come back next time. The highlight colour is in
+Settings → Appearance.
+
+**Sermon summary.** While listening, Biverse keeps a record of what was said and which scriptures
+came up. Open **Service → Sermon summary** (Ctrl+Shift+S) during or after the service for:
+
+- every scripture referenced, in order, with the time;
+- the main themes and key points (sentences taken from the sermon itself);
+- a timeline, and the full transcript when you **Save as…** or **Copy**.
+
+Each service is saved automatically (Service → Open a previous sermon…). A new record starts when
+you press Listen after a 30-minute break, or with Service → Start a new sermon.
+
+**AI-written summary (optional).** Download `Biverse-ai-summary-pack-….zip` (about 1.2 GB) from the
+Releases page and install it with Settings → Speech → **Install model pack…**. The summary window
+then offers **Write AI summary**: a short prose summary written on this computer (nothing is sent
+anywhere) in under a minute. It needs a 64-bit computer with about 8 GB of RAM; Windows 7/8 and
+32-bit computers can't run it.
+
+**The look of the window** follows your computer's light or dark setting. Choose Dark or Light
+permanently in Settings → Appearance → "Operator window look".
 
 ---
 
@@ -355,7 +393,7 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
 **The level meter does not move.**
 - Check that the right **Input** is selected, press **⟳**, and try speaking into it.
 - On a Mac, go to **System Settings → Privacy & Security → Microphone** and make sure
-  **BiVerse** is switched on. Then restart BiVerse.
+  **Biverse** is switched on. Then restart Biverse.
 - On Windows, go to **Settings → Privacy → Microphone** and allow desktop apps to use the
   microphone.
 - A sound-desk feed may simply be turned down. Ask the sound engineer.
@@ -364,7 +402,7 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
 
 **Speech is heard, but references are missed.**
 - Look at the Transcript. If "genesis two eighteen" appears as "genesis to a team", the
-  speech model is mishearing; the words are not reaching BiVerse cleanly.
+  speech model is mishearing; the words are not reaching Biverse cleanly.
 - Use a cleaner feed (from the desk rather than a microphone in the room). A laptop microphone
   picking up a loudspeaker is the hardest case.
 - Install the Parakeet model pack (section 9). It is the single biggest improvement.
@@ -374,24 +412,31 @@ To remove it, run `python tools/import_translation.py NIV x x --remove`.
 **The verse appears on the wrong screen, or on my laptop.**
 - Windows: press **Win+P → Extend**. macOS: turn off mirroring (section 2).
 - Press **⟳** next to Output and choose the projector again.
-- With Windows display scaling (125 %, 150 %), BiVerse uses real pixels, so this should line
+- With Windows display scaling (125 %, 150 %), Biverse uses real pixels, so this should line
   up. If it does not, press F11 on the output window for a movable window.
 - macOS: if the output hides behind the menu bar or is on another desktop (Space), choose the
   display again in the Output list.
 
-**I unplugged the microphone or projector by mistake.** BiVerse keeps running. Plug it back
-in and press the **⟳** button next to Input or Output. While listening, BiVerse also retries
+**I unplugged the microphone or projector by mistake.** Biverse keeps running. Plug it back
+in and press the **⟳** button next to Input or Output. While listening, Biverse also retries
 the microphone by itself every few seconds.
 
 **"No speech model could be used" banner.** The `models` folder is missing, or (on an old
 computer) the model could not start. Re-extract the download,
 or choose a model folder in Settings → Speech. Search and projection still work without one.
 
+**On an Intel Mac, both windows are black or the app closes straight away.** Versions 1.0–1.2
+had this problem on macOS 11 and 12; it is fixed from 1.2.1. Download the latest
+`Biverse-…-macos-intel.zip`.
+
+**macOS asks for microphone permission again after updating to 1.3.** That is expected once: the
+app's internal identifier changed with the new name.
+
 **macOS says the app is damaged or from an unidentified developer.** See *Installing → macOS*
 (right-click → Open, or the `xattr` command).
 
-**My antivirus deleted or blocked BiVerse.exe.** Programs made with PyInstaller are sometimes
-falsely flagged. Restore the file from quarantine and add the BiVerse folder as an exception.
+**My antivirus deleted or blocked Biverse.exe.** Programs made with PyInstaller are sometimes
+falsely flagged. Restore the file from quarantine and add the Biverse folder as an exception.
 If you are unsure, check the zip's SHA-256 against `SHA256SUMS.txt` on the Releases page.
 
 **Something went wrong.** Use **Help → Open log folder** and send `biverse.log` to whoever

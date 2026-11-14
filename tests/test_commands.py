@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from versecast import commands as C
-from versecast.commands import parse_command
+from biverse import commands as C
+from biverse.commands import parse_command
 
 
 @pytest.mark.parametrize("text,cmd", [

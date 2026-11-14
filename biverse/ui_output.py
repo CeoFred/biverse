@@ -28,7 +28,7 @@ class OutputWindow(object):
         self._pending = None
 
         self.win = tk.Toplevel(root)
-        self.win.title("BiVerse Output")
+        self.win.title("Biverse Output")
         self.win.configure(background="#000000")
         self.win.withdraw()
         self.win.protocol("WM_DELETE_WINDOW", self.hide)

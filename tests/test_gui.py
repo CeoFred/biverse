@@ -14,8 +14,8 @@ def op(bible, tmp_path):
     except tk.TclError as exc:
         pytest.skip("no display: %s" % exc)
     root.withdraw()
-    from versecast.settings import Settings
-    from versecast.ui_operator import OperatorWindow
+    from biverse.settings import Settings
+    from biverse.ui_operator import OperatorWindow
     settings = Settings(str(tmp_path / "settings.json"))
     settings["output_visible"] = False
     # Don't load real speech models (up to ~2 GB) in UI tests
@@ -85,7 +85,7 @@ def test_translation_switch_rerenders_live(op):
 
 
 def test_detection_manual_and_auto(op):
-    from versecast.detector import Detector
+    from biverse.detector import Detector
     d = Detector()
     (kind, det), = d.feed_final("romans eight twenty eight", now=0)
     op._on_detection(kind, det)
@@ -122,7 +122,7 @@ def test_settings_saved_on_close(op, tmp_path):
 
 
 def test_settings_dialog_opens(op):
-    from versecast.ui_settings import SettingsDialog
+    from biverse.ui_settings import SettingsDialog
     dlg = SettingsDialog(op)
     op.root.update()
     dlg.bold.set(False)
@@ -139,7 +139,7 @@ def test_render_thumbnail_matches_output_aspect(op):
 
 
 def test_poll_handles_events(op):
-    from versecast.detector import Detector
+    from biverse.detector import Detector
     d = Detector()
     op.events.put(("model", "missing", ""))
     op.events.put(("partial", "turn to john"))
@@ -168,7 +168,7 @@ def test_listen_never_blocks_ui(op, monkeypatch):
     import threading
     import time as _t
 
-    from versecast import audio
+    from biverse import audio
     gate = threading.Event()
 
     def hanging_open(device):
@@ -241,7 +241,7 @@ def test_move_to_verse_uses_live_chapter(op):
 # -- phase 1: intents -------------------------------------------------------------
 
 def _say(op, text, t, channel="main"):
-    from versecast.commands import parse_intent
+    from biverse.commands import parse_intent
     intent = parse_intent(text)
     assert intent is not None, text
     op._on_command(intent, channel, t, text)
@@ -353,3 +353,94 @@ def test_blank_screen_is_not_followed(op, bible):
     _read_aloud(op, bible.verse("KJV", 43, 3, 16))
     op.blank()
     assert op.live.selection.verse_label() == "John 3:16"
+
+
+def test_voice_switches_translation_until_changed(op, bible):
+    _show(op, "gen 1:3")
+    from biverse.commands import parse_intent
+    intent = parse_intent("let's read this in Young's Literal", op.engine.translations)
+    op._on_command(intent, "main", 1.0, "let's read this in Young's Literal")
+    assert op.translation() == "YLT" and "Let light be" in op.output.slide.text
+    op.step(1)  # stays switched for the next verse and chapter
+    assert op.translation() == "YLT"
+    intent = parse_intent("show it in the NIV", op.engine.translations)
+    op._on_command(intent, "main", 5.0, "show it in the NIV")
+    assert op.translation() == "YLT" and "not installed" in op.status_var.get()
+
+
+# -- emphasis ----------------------------------------------------------------------
+
+def test_emphasis_marks_live_verse(op, tmp_path):
+    from biverse.emphasis import EmphasisStore
+    from biverse.ui_emphasis import EmphasisDialog
+    op.emphasis = EmphasisStore(str(tmp_path / "emph.json"))
+    op.builder.emphasis = op.emphasis
+    _show(op, "john 3:16")
+    dlg = EmphasisDialog(op, 43, 3, 16, "KJV")
+    op.root.update()
+    dlg.select_words([2, 3])  # "so loved"
+    assert dlg.selected_words() == [2, 3]
+    dlg.apply("highlight")
+    assert op.output.slide.marks == {2: {"highlight"}, 3: {"highlight"}}
+    dlg.apply("highlight")  # toggles off
+    assert op.output.slide.marks == {}
+    dlg.select_words([5])
+    dlg.apply("underline")
+    dlg.apply("bold")
+    assert op.output.slide.marks == {5: {"bold", "underline"}}
+    # saved per translation + verse
+    assert EmphasisStore(str(tmp_path / "emph.json")).get("KJV", 43, 3, 16) == {5: {"bold", "underline"}}
+    assert op.emphasis.get("ASV", 43, 3, 16) == {}
+    dlg.clear_all()
+    assert op.output.slide.marks == {}
+    dlg.win.destroy()
+
+
+def test_marked_slide_draws_word_items(op):
+    from biverse.render import TEXT, Slide
+    c = tk.Canvas(op.root, width=640, height=360)
+    slide = Slide(TEXT, "For God so loved the world", "John 3:16", marks={2: {"highlight"}, 3: {"bold"}})
+    op.renderer.draw(c, slide, op.settings.appearance, 640, 360, translation="KJV")
+    kinds = [c.type(i) for i in c.find_all()]
+    assert kinds.count("rectangle") == 1  # one highlight box
+    assert sum(1 for i in c.find_all() if c.type(i) == "text") >= 6  # word by word
+
+
+def test_theme_switches_live(op):
+    op.set_theme("dark")
+    assert op.root.cget("background") == op.pal["bg"]
+    assert op.transcript.cget("background") == op.pal["surface"]
+    dark_bg = op.transcript.cget("background")
+    op.set_theme("light")
+    assert op.transcript.cget("background") != dark_bg
+    op._status("problem", error=True)
+    assert op.status_label.cget("foreground") == op.pal["error"]
+
+
+def test_theme_setting_forces_mode(op, monkeypatch):
+    monkeypatch.delenv("BIVERSE_THEME", raising=False)
+    op.settings["ui_theme"] = "dark"
+    op._check_theme()
+    assert op.theme_mode == "dark"
+    op.settings["ui_theme"] = "light"
+    op._check_theme()
+    assert op.theme_mode == "light"
+
+
+def test_sermon_record_and_summary_window(op):
+    op.new_sermon(quiet=True)
+    for text in ["Turn with me to John chapter three verse sixteen.",
+                 "The point is that the love of God is a gift we receive by faith alone today.",
+                 "Remember this: grace means the love of God comes before our work and effort."]:
+        op._add_final(text)
+    from biverse.detector import Detector
+    (kind, det), = Detector().feed_final("john three sixteen", now=0)
+    op._on_detection(kind, det)
+    assert op.sermon.refs[-1][1] == "John 3:16"
+    from biverse.ui_summary import SummaryWindow
+    w = SummaryWindow(op, op.sermon)
+    op.root.update()
+    body = w.text.get("1.0", "end")
+    assert "John 3:16" in body and "Key points" in body
+    assert "Scriptures" in w.text_for_export()
+    w.win.destroy()

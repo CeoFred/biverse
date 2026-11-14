@@ -6,7 +6,7 @@ import zipfile
 
 import pytest
 
-from versecast import modelpack, recognizer
+from biverse import modelpack, recognizer
 
 FILES = ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt", "silero_vad.onnx"]
 MANIFEST = {"engine": "sherpa-offline", "id": "parakeet", "label": "Parakeet (high accuracy)",
@@ -37,7 +37,7 @@ def test_install_valid_pack(tmp_path):
 
 def test_installed_pack_is_discovered(tmp_path, monkeypatch):
     monkeypatch.setenv("BIVERSE_CONFIG_DIR", str(tmp_path / "cfg"))
-    from versecast import paths
+    from biverse import paths
     modelpack.install(_pack(tmp_path / "p.zip"), paths.user_models_dir())
     assert "parakeet" in [m.id for m in recognizer.discover_models()]
 

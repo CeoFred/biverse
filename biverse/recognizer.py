@@ -176,7 +176,9 @@ def discover_models(custom_path: Optional[str] = None) -> List[ModelInfo]:
 def engine_available(engine: str) -> bool:
     if engine == "vosk":
         return vosk is not None
-    return sherpa() is not None
+    if engine in ("sherpa-online", "sherpa-offline", "dual"):
+        return sherpa() is not None
+    return False  # not a speech engine (e.g. the AI summary pack)
 
 
 def choose_model(models: List[ModelInfo], preference: str = "auto", custom_path: str = "",
@@ -651,6 +653,7 @@ class SpeechEngine(object):
         self._load_token = 0
         self._use_reference = True
         self.commands = True  # spoken "next verse", "go back"...
+        self.translations = []  # installed (code, name): "let's read this in the ASV"
 
     @property
     def model_path(self) -> Optional[str]:
@@ -791,6 +794,6 @@ class SpeechEngine(object):
     def _command(self, text: str, channel: str) -> None:
         if not self.commands:
             return
-        intent = parse_intent(text)
+        intent = parse_intent(text, self.translations)
         if intent is not None:
             self.events.put(("command", intent, channel, time.monotonic(), text))

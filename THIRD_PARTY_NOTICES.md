@@ -1,13 +1,15 @@
 # Third-party notices
 
-BiVerse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following components.
+Biverse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following components.
 
 | Component | Use | Licence |
 |---|---|---|
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 2.0.1 | Speech recognition engine (Kroko, Parakeet) | Apache License 2.0 |
 | [ONNX Runtime](https://github.com/microsoft/onnxruntime) (bundled by sherpa-onnx) | Neural network runtime | MIT |
-| [Kroko ASR](https://huggingface.co/Banafo/Kroko-ASR) English community streaming model (2025-08-06), by Banafo, ONNX export by sherpa-onnx | Built-in live speech model | CC-BY-SA, as stated on the model card (the repository's LICENSE file is empty and gives no version). Attribution: "Kroko ASR community model by Banafo". The model files keep this licence; BiVerse's own code is MIT |
-| [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), int8 ONNX export by sherpa-onnx | Optional high-accuracy model pack | CC-BY-4.0. Attribution: "parakeet-tdt-0.6b-v2 by NVIDIA". NVIDIA does not endorse BiVerse |
+| [Kroko ASR](https://huggingface.co/Banafo/Kroko-ASR) English community streaming model (2025-08-06), by Banafo, ONNX export by sherpa-onnx | Built-in live speech model | CC-BY-SA, as stated on the model card (the repository's LICENSE file is empty and gives no version). Attribution: "Kroko ASR community model by Banafo". The model files keep this licence; Biverse's own code is MIT |
+| [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), int8 ONNX export by sherpa-onnx | Optional high-accuracy model pack | CC-BY-4.0. Attribution: "parakeet-tdt-0.6b-v2 by NVIDIA". NVIDIA does not endorse Biverse |
+| [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF) (GGUF q4_k_m) | Optional AI summary pack | Apache License 2.0 (Alibaba Cloud / Qwen team) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) b12366 `llama-completion` | Runs the AI summary model in the optional pack | MIT |
 | [Silero VAD](https://github.com/snakers4/silero-vad) | Speech/pause detection in the Parakeet pack | MIT |
 | [Vosk API](https://github.com/alphacep/vosk-api) 0.3.44 (`libvosk`, Python bindings) | Offline speech recognition | Apache License 2.0 |
 | [vosk-model-small-en-us-0.15](https://alphacephei.com/vosk/models) | English speech model, © 2020 Alpha Cephei Inc | Apache License 2.0 |
@@ -15,7 +17,7 @@ BiVerse itself is MIT-licensed (see `LICENSE`). It bundles or uses the following
 | [python-sounddevice](https://github.com/spatialaudio/python-sounddevice) 0.5.6 | Audio input | MIT |
 | [PortAudio](http://www.portaudio.com/), bundled by sounddevice on Windows and macOS | Audio I/O library | MIT-style PortAudio licence |
 | cffi | Used by vosk and sounddevice | MIT |
-| requests, srt, tqdm | Imported by vosk; not used by BiVerse | Apache-2.0 / MIT / MPL-2.0 AND MIT |
+| requests, srt, tqdm | Imported by vosk; not used by Biverse | Apache-2.0 / MIT / MPL-2.0 AND MIT |
 | Python and Tcl/Tk (bundled by PyInstaller) | Runtime and GUI | PSF licence / Tcl/Tk BSD-style licence |
 | PyInstaller bootloader | Packaging | GPL-2.0 with a bootloader exception that allows distributing bundled apps under any licence |
 
@@ -32,10 +34,10 @@ All bundled translations are in the **public domain**.
 | BBE | Bible in Basic English (1965) | scrollmapper | Treated as public domain by its distributors. Churches should confirm its status in their country |
 
 The scrollmapper repository is under the MIT License, "Copyright (c) 2024 Scrollmapper". Its
-full text is the standard MIT licence (the same text as BiVerse's `LICENSE`, with that
+full text is the standard MIT licence (the same text as Biverse's `LICENSE`, with that
 copyright line).
 
-BiVerse never bundles copyrighted translations such as NIV, NKJV, ESV or NLT. A church that
+Biverse never bundles copyrighted translations such as NIV, NKJV, ESV or NLT. A church that
 holds a licence can import one locally (see USER_GUIDE.md, "Adding a licensed translation").
 
 ## Full licence texts

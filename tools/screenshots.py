@@ -21,11 +21,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("BIVERSE_CONFIG_DIR", tempfile.mkdtemp(prefix="biverse-shot-"))
 
-from versecast.app import _ttk_theme  # noqa: E402
-from versecast.bible import open_default  # noqa: E402
-from versecast.detector import Detector  # noqa: E402
-from versecast.settings import Settings  # noqa: E402
-from versecast.ui_operator import OperatorWindow  # noqa: E402
+from biverse.app import _ttk_theme  # noqa: E402
+from biverse.bible import open_default  # noqa: E402
+from biverse.detector import Detector  # noqa: E402
+from biverse.settings import Settings  # noqa: E402
+from biverse.ui_operator import OperatorWindow  # noqa: E402
 
 SPEECH = [
     "good morning church please open your bibles with me to romans chapter eight",
@@ -54,6 +54,11 @@ def main(kind: str, out: str) -> int:
         op.search_var.set("john 3:16")
         op.search()
         op.go_live()
+        # show emphasis on the projector: highlight "so loved", underline "everlasting life"
+        sel = op.live.selection
+        op.emphasis.toggle("KJV", sel.book, sel.chapter, sel.cur, [2, 3], "highlight")
+        op.emphasis.toggle("KJV", sel.book, sel.chapter, sel.cur, [23, 24], "underline")
+        op._render_all()
         op.search_var.set("love is patient")
         op.search()
         op._handle(("partial", "for god so loved the world that he"))

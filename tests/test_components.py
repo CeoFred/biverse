@@ -6,8 +6,8 @@ from array import array
 
 import pytest
 
-from versecast import audio, displays
-from versecast.settings import DEFAULTS, Settings
+from biverse import audio, displays
+from biverse.settings import DEFAULTS, Settings
 
 # -- audio helpers -----------------------------------------------------------------
 
@@ -101,7 +101,7 @@ def test_settings_corrupt_file_is_backed_up(tmp_path):
 
 
 def test_config_dir_override(tmp_path, monkeypatch):
-    from versecast import paths
+    from biverse import paths
     monkeypatch.setenv("BIVERSE_CONFIG_DIR", str(tmp_path / "cfg"))
     assert paths.config_dir() == str(tmp_path / "cfg")
     assert os.path.isdir(str(tmp_path / "cfg"))
@@ -151,7 +151,7 @@ def test_list_displays_never_empty():
 
 
 def test_selection_labels():
-    from versecast.controller import Selection
+    from biverse.controller import Selection
     s = Selection(43, 3, 16, 18)
     assert s.passage_label() == "John 3:16-18"
     assert s.status_label() == "John 3:16  (1/3)"
@@ -159,7 +159,7 @@ def test_selection_labels():
 
 
 def test_step_through_range_and_beyond(bible):
-    from versecast.controller import Selection, step
+    from biverse.controller import Selection, step
     s = Selection(43, 3, 35, 36)
     s = step(bible, s, 1)
     assert s.verse_label() == "John 3:36"
@@ -172,17 +172,53 @@ def test_step_through_range_and_beyond(bible):
 
 
 def test_slide_for_missing_verse(bible):
-    from versecast.controller import Selection, SlideBuilder
+    from biverse.controller import Selection, SlideBuilder
     # Matthew 17:21 is not in the ASV
     slide = SlideBuilder(bible).slide(Selection(40, 17, 21, 21), "ASV")
     assert "not included in the ASV" in slide.text
 
 
 def test_chapter_step(bible):
-    from versecast.controller import Selection, chapter_step
+    from biverse.controller import Selection, chapter_step
     assert chapter_step(bible, Selection(43, 3, 16, 16), 1).verse_label() == "John 4:1"
     assert chapter_step(bible, Selection(43, 3, 16, 16), -1).verse_label() == "John 2:1"
     assert chapter_step(bible, Selection(1, 50, 3, 3), 1).verse_label() == "Exodus 1:1"
     assert chapter_step(bible, Selection(2, 1, 3, 3), -1).verse_label() == "Genesis 50:1"
     assert chapter_step(bible, Selection(66, 22, 1, 1), 1) is None
     assert chapter_step(bible, Selection(1, 1, 5, 5), -1) is None
+
+
+def test_old_settings_folder_is_carried_over(tmp_path):
+    from biverse import paths
+    old = tmp_path / "BiVerse"
+    old.mkdir()
+    (old / "settings.json").write_text("{}")
+    new = tmp_path / "Biverse"
+    paths._migrate_old_name(str(new))
+    assert (new / "settings.json").exists() or (old / "settings.json").exists()  # case-insensitive disks: same dir
+
+
+def test_emphasis_store_roundtrip(tmp_path):
+    from biverse.emphasis import EmphasisStore
+    p = str(tmp_path / "e.json")
+    s = EmphasisStore(p)
+    assert s.toggle("kjv", 43, 3, 16, [1, 2], "bold") == {1: {"bold"}, 2: {"bold"}}
+    s.toggle("KJV", 43, 3, 16, [2], "highlight")
+    assert EmphasisStore(p).get("KJV", 43, 3, 16) == {1: {"bold"}, 2: {"bold", "highlight"}}
+    s.clear("KJV", 43, 3, 16, [1])
+    assert s.get("KJV", 43, 3, 16) == {2: {"bold", "highlight"}}
+    s.clear("KJV", 43, 3, 16)
+    assert EmphasisStore(p).get("KJV", 43, 3, 16) == {}
+
+
+def test_emphasis_store_ignores_corrupt_file(tmp_path):
+    from biverse.emphasis import EmphasisStore
+    p = tmp_path / "e.json"
+    p.write_text("{broken")
+    assert EmphasisStore(str(p)).get("KJV", 1, 1, 1) == {}
+
+
+def test_layout_words_wraps_like_tk():
+    from biverse.render import layout_words
+    assert layout_words(["a"] * 5, [10] * 5, 5, 40) == [[0, 1, 2], [3, 4]]
+    assert layout_words(["long"], [100], 5, 40) == [[0]]

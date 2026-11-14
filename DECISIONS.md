@@ -5,14 +5,16 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 
 ## Naming
 
-- **Product name: BiVerse.** The brief opens with "You are building BiVerse" but later uses
-  *VerseCast* for the package, settings folder, zip names and bundle id. Everything a user
-  sees uses **BiVerse**: window titles, `BiVerse.exe`, `BiVerse.app`, zip names
-  (`BiVerse-<version>-<build>.zip`) and the settings folder (`%APPDATA%\BiVerse`,
-  `~/Library/Application Support/BiVerse`, `~/.config/biverse`). Two internal identifiers
-  keep the spec's literal values because they were spelled out explicitly: the Python package
-  is `versecast` (per the package layout) and the macOS bundle identifier is
-  `org.versecast.app`. The PyInstaller spec keeps the name `packaging/versecast.spec`.
+- **Product name: Biverse (v1.3).** The original brief used both "BiVerse" and *VerseCast*.
+  v1.0–v1.2 showed "BiVerse" to users and kept `versecast` as the Python package and
+  `org.versecast.app` as the macOS bundle id. From v1.3 the name is **Biverse** everywhere:
+  - window titles, `Biverse.exe`, `Biverse.app` and zip names (`Biverse-<version>-<build>.zip`)
+  - the Python package `biverse` (`python -m biverse`) and `packaging/biverse.spec`
+  - the bundle id `org.biverse.app`. macOS will ask for microphone permission again once,
+    because it sees a new app.
+  - the settings folder `%APPDATA%\Biverse`, `~/Library/Application Support/Biverse`,
+    `~/.config/biverse`. On Windows and default macOS disks, names are case-insensitive, so the
+    old `BiVerse` folder is the same folder. On case-sensitive disks it is renamed on first run.
 - **Repository layout.** The local git repository root was the parent `personal/` folder. To
   put `.github/` at the repository root, `biverse/` was made its own checkout of the same
   remote (`CeoFred/biverse`), continuing its history. The parent repository was left as it
@@ -38,14 +40,14 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   reproducible from pinned sources.
 - **Licensed translations go to a separate user database** (`user_translations.db` in the
   settings folder), so they survive updates and are never bundled. Import them with
-  `tools/import_translation.py` or `BiVerse --import-translation`.
+  `tools/import_translation.py` or `Biverse --import-translation`.
 - **No FTS.** Word-wise `LIKE` search takes 20–40 ms over a translation, so the optional
   runtime FTS table was not added. Exact-order matches are ranked first, then all-words
   matches.
 
 ## Parser
 
-- **A verse table is embedded for validation** (`versecast/versification.py`, generated from
+- **A verse table is embedded for validation** (`biverse/versification.py`, generated from
   the KJV). The parser validates without opening the database, and the app passes the
   database's `verse_count` in. Both hold the same numbers, and the DB builder asserts that
   they agree.
@@ -124,7 +126,37 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   verse 8" is a relative reference rather than a command: the UI tells the detector which book
   and chapter are on screen (`Detector.set_position`), and relative verses resolve against the
   newest of that and the last detection.
-- **Following the reading (phase 2).** `versecast/follow.py` aligns the last 12 spoken words
+- **Bible version by voice (v1.3)** stays switched until it is changed again, as the user chose.
+  A request needs a switching verb ("switch/change/use/show"), a "read … in …" instruction at
+  the start of the sentence, or a short request ("ASV please"). "As we read in the King
+  James…" and "the King James version says…" are quotations and do not switch. Names are
+  matched longest first ("New King James" before "King James", "New American Standard" before
+  "American Standard"). Spelled-out abbreviations are joined ("k j v" → kjv). "young" and
+  "amp" alone are not names ("the young people", "the amp").
+- **Emphasis (v1.3)** is stored per translation, book, chapter and verse as word indices in
+  `emphasis.json`, because word positions differ between translations. Verses with marks are
+  drawn word by word, using the same greedy wrap and auto-fit size as plain verses, so line
+  breaks don't change when marks are added. Plain verses still use the single text item
+  (unchanged rendering). Highlighted words use dark text on the highlight colour for contrast.
+- **Modern look (v1.3)** uses ttk "clam" restyled with two palettes; the native aqua and vista
+  themes cannot be recoloured. It follows the OS dark/light setting (macOS `defaults`, the
+  Windows registry, GNOME `gsettings`), re-checked every 5 s. `BIVERSE_THEME` forces one look
+  for screenshots.
+- **Sermon summary (v1.3).** The built-in summary is extractive and offline: sentences of 7–60
+  words, scored by frequent content words, with a bonus for signposts ("the point is",
+  "remember", "number one", "in conclusion") and for sentences within 60 s after a scripture.
+  It shows the top 7 in chronological order, plus the scriptures and a timeline.
+
+  The optional AI pack is Qwen2.5-1.5B-Instruct (Apache-2.0; the 3B model's licence is not
+  Apache) run by llama.cpp's `llama-completion` as a separate process, so there are no Python
+  dependencies and no network. One pack holds the binaries for macOS (both CPUs), Windows x64
+  and Linux x64. The model only sees the extractive key points and scriptures (small prompt,
+  fast, grounded), and is told not to add verses.
+
+  It was **not run locally**: executing the downloaded binary was blocked by the session's
+  permission policy. A CI job (`ai-summary`) runs the real model on Linux, and a stand-in
+  program tests the integration on every platform.
+- **Following the reading (phase 2).** `biverse/follow.py` aligns the last 12 spoken words
   (Kroko partials, about 5 updates a second) with the live verse in every installed translation,
   using a fuzzy in-order longest common subsequence. Spoken and verse words count as equal if
   identical, if they share a 4-letter prefix, or if their similarity ratio is at least 0.75.
@@ -186,7 +218,7 @@ Choices made where the brief was silent or contradictory, with the reason for ea
   names; its misses are near-miss spellings ("Habakku", "Nebamiah"), so the fuzzy name match
   helps more than biasing does. Hotwords at 2.0 started breaking "2 John" and "Haggai".
   Hotwords use modified beam search (4 paths) with a BPE vocab generated from the model's
-  tokens.txt into the settings folder. If a model rejects them, BiVerse falls back to plain
+  tokens.txt into the settings folder. If a model rejects them, Biverse falls back to plain
   decoding.
 - **Near-miss book names** are matched with difflib (ratio ≥ 0.75, a clear margin over the
   next book, at least 5 letters, not a common English word). They count only when "chapter N"
@@ -260,7 +292,7 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 - **The sounddevice wheel ships every platform's PortAudio.** The spec keeps only this
   platform's and architecture's library, and drops the ASIO variants.
 - **No UPX.** It causes antivirus false positives.
-- **Windows smoke test.** `BiVerse.exe` is a GUI-subsystem program with no console, so CI runs
+- **Windows smoke test.** `Biverse.exe` is a GUI-subsystem program with no console, so CI runs
   it with `Start-Process -Wait` and reads the JSON from `--report self-test.json`.
 - **The Intel macOS runner is `macos-15-intel`**, the last Intel image GitHub announced
   (available until 2027). `macos-13` has been retired.
@@ -277,6 +309,6 @@ Choices made where the brief was silent or contradictory, with the reason for ea
 ## Dependencies
 
 Runtime dependencies are only vosk, sounddevice and the standard library. vosk itself pulls
-in cffi, requests, srt and tqdm. BiVerse never uses requests or tqdm, which vosk needs only for
+in cffi, requests, srt and tqdm. Biverse never uses requests or tqdm, which vosk needs only for
 its model *download* helpers, and the app makes no network calls. Build-time-only tools are
 PyInstaller, pytest and ruff.

@@ -6,7 +6,7 @@ import os
 import sys
 from typing import List, Optional
 
-APP_DIR_NAME = "BiVerse"
+APP_DIR_NAME = "Biverse"
 
 
 def is_frozen() -> bool:
@@ -34,8 +34,8 @@ def exe_dir() -> str:
 def beside_app_dirs() -> List[str]:
     """Folders a user can drop things into next to the program.
 
-    On macOS the executable is inside ``BiVerse.app/Contents/MacOS``; the folder
-    that contains ``BiVerse.app`` counts as "next to the executable" too.
+    On macOS the executable is inside ``Biverse.app/Contents/MacOS``; the folder
+    that contains ``Biverse.app`` counts as "next to the executable" too.
     """
     dirs = [exe_dir()]
     if is_frozen() and sys.platform == "darwin":
@@ -45,6 +45,26 @@ def beside_app_dirs() -> List[str]:
                 dirs.append(os.sep.join(parts[:i]) or os.sep)
                 break
     return dirs
+
+
+OLD_APP_DIR_NAME = "BiVerse"  # v1.0-v1.2
+
+
+def _migrate_old_name(path: str) -> None:
+    """On case-sensitive disks, carry the v1.0-v1.2 "BiVerse" folder over to "Biverse"."""
+    parent, name = os.path.split(path)
+    old = os.path.join(parent, OLD_APP_DIR_NAME)
+    if name != APP_DIR_NAME or not os.path.isdir(old) or os.path.isdir(path):
+        return
+    try:
+        if os.path.samefile(old, parent):  # pragma: no cover
+            return
+    except OSError:
+        pass
+    try:
+        os.rename(old, path)
+    except OSError:
+        pass
 
 
 def config_dir() -> str:
@@ -60,6 +80,7 @@ def config_dir() -> str:
     else:
         base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
         path = os.path.join(base, APP_DIR_NAME.lower())
+    _migrate_old_name(path)
     try:
         os.makedirs(path, exist_ok=True)
     except OSError:

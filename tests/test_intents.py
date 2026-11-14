@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from versecast.commands import CHAPTER, GOTO, RESUME, STEP, STOP, VERSE, Intent, parse_intent
+from biverse.commands import CHAPTER, GOTO, RESUME, STEP, STOP, VERSE, Intent, parse_intent
 
 NEXT = Intent(STEP, VERSE, 1)
 PREV = Intent(STEP, VERSE, -1)
@@ -137,3 +137,45 @@ def test_negative(text):
 
 def test_corpus_size():
     assert len(POSITIVE) + len(NEGATIVE) >= 200
+
+
+# -- switching Bible version ---------------------------------------------------------
+
+from biverse.commands import TRANSLATION  # noqa: E402
+
+INSTALLED = [("KJV", "King James Version (1769)"), ("WEB", "World English Bible"),
+             ("ASV", "American Standard Version (1901)"), ("YLT", "Young's Literal Translation (1898)"),
+             ("BBE", "Bible in Basic English (1965)"), ("MINE", "Our Church Licensed Bible")]
+
+
+@pytest.mark.parametrize("text,code", [
+    ("let's read this in the ASV", "ASV"), ("switch to the King James", "KJV"), ("World English please", "WEB"),
+    ("can we see that in Young's Literal", "YLT"), ("change the version to B B E", "BBE"), ("K J V", "KJV"),
+    ("basic english please", "BBE"), ("use the American Standard", "ASV"), ("read it in the ASV", "ASV"),
+    ("now read that in the King James", "KJV"), ("read verse 5 in the ASV", "ASV"),
+    ("switch to the King James version", "KJV"), ("show it in the World English Bible", "WEB"),
+    ("let us read it in the authorized version", "KJV"), ("change to KJV", "KJV"),
+    ("switch to our church licensed bible", "MINE"), ("use MINE", "MINE"),
+])
+def test_switch_installed_version(text, code):
+    assert parse_intent(text, INSTALLED) == Intent(TRANSLATION, code=code)
+
+
+@pytest.mark.parametrize("text,code", [
+    ("read it in the New King James", "NKJV"), ("show it in the NIV", "NIV"), ("switch to N K J V", "NKJV"),
+    ("let's read this in the English Standard Version", "ESV"), ("New Living Translation please", "NLT"),
+    ("the new american standard bible", "NASB"),
+])
+def test_version_not_installed(text, code):
+    assert parse_intent(text, INSTALLED) == Intent(TRANSLATION, code="", where=code)
+
+
+@pytest.mark.parametrize("text", [
+    "the King James version says love is patient", "in the King James it is translated charity",
+    "as we read in the King James", "we read in the King James that God is love", "when I was young",
+    "show the young people where to sit", "put the amp on", "the world is in English and French",
+    "James wrote to the twelve tribes", "the message of the cross", "good news is coming",
+])
+def test_not_a_version_switch(text):
+    it = parse_intent(text, INSTALLED)
+    assert it is None or it.kind != TRANSLATION
