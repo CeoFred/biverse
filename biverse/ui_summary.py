@@ -18,6 +18,7 @@ class SummaryWindow(object):
         self.log = log
         self.summary = summarise(log)
         self.ai_text = ""
+        self._gen = 0  # bumped when the transcript changes; older AI results are dropped
         self._results = queue.Queue()  # type: queue.Queue
         p = op.pal
 
@@ -29,9 +30,10 @@ class SummaryWindow(object):
         frame.pack(fill="both", expand=True)
         when = time.strftime("%A %d %B %Y, %H:%M", time.localtime(log.started))
         ttk.Label(frame, text="Sermon summary", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(frame, text="%s  ·  %s  ·  %d words heard" % (
-            when, clock(self.summary["duration"]), self.summary["words"]), style="Muted.TLabel").pack(
-            anchor="w", pady=(0, 8))
+        self._when = when
+        self.header = ttk.Label(frame, text="", style="Muted.TLabel")
+        self.header.pack(anchor="w", pady=(0, 8))
+        self._set_header()
 
         bar = ttk.Frame(frame)
         bar.pack(fill="x", pady=(0, 8))
@@ -39,6 +41,7 @@ class SummaryWindow(object):
         self.ai_btn = ttk.Button(bar, text="✨ Write AI summary", style="Accent.TButton", command=self.run_ai)
         self.ai_btn.pack(side="left")
         ok, note = llm.describe(self.pack)
+        self._ai_ok = ok
         if not ok or self.log.empty():
             self.ai_btn.state(["disabled"])
         self.ai_note = ttk.Label(bar, text=note if ok else note, style="Muted.TLabel")
@@ -64,13 +67,34 @@ class SummaryWindow(object):
         self.render()
 
     # -- content ---------------------------------------------------------------------
+    def _set_header(self) -> None:
+        self.header.configure(text="%s  ·  %s  ·  %d words heard" % (
+            self._when, clock(self.summary["duration"]), self.summary["words"]))
+
+    def reload(self) -> None:
+        """The transcript was cleared or text was pasted: rebuild the summary and drop
+        any AI summary written from the old transcript."""
+        try:
+            if not self.win.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        self._gen += 1
+        self.summary = summarise(self.log)
+        self.ai_text = ""
+        self._set_header()
+        self.ai_btn.state(["disabled"] if not self._ai_ok or self.log.empty() else ["!disabled"])
+        self.ai_note.configure(text="Transcript changed" if not self.log.empty() else "The transcript is empty")
+        self.render()
+
     def render(self) -> None:
         t = self.text
         t.configure(state="normal")
         t.delete("1.0", "end")
         s = self.summary
         if self.log.empty():
-            t.insert("end", "Nothing was heard yet. Press Listen during the sermon, then open this again.", "muted")
+            t.insert("end", "Nothing was heard yet. Press Listen during the sermon, or paste or import a "
+                             "transcript (Service menu), then open this again.", "muted")
             t.configure(state="disabled")
             return
         if self.ai_text:
@@ -125,23 +149,27 @@ class SummaryWindow(object):
         self.ai_btn.state(["disabled"])
         self.ai_note.configure(text="Writing the summary on this computer… (can take a minute)")
 
+        gen, summary = self._gen, self.summary
+
         def work():
             try:
-                self._results.put((True, llm.summarise_ai(self.pack, self.summary)))
+                self._results.put((gen, True, llm.summarise_ai(self.pack, summary)))
             except Exception as exc:
-                self._results.put((False, str(exc)))
+                self._results.put((gen, False, str(exc)))
 
         threading.Thread(target=work, name="ai-summary", daemon=True).start()
         self.win.after(300, self._poll)
 
     def _poll(self) -> None:
         try:
-            ok, value = self._results.get_nowait()
+            gen, ok, value = self._results.get_nowait()
         except queue.Empty:
             if self.win.winfo_exists():
                 self.win.after(300, self._poll)
             return
         if not self.win.winfo_exists():
+            return
+        if gen != self._gen:  # written from a transcript that has since changed
             return
         self.ai_btn.state(["!disabled"])
         if ok:

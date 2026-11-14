@@ -33,6 +33,7 @@ MOD_LABEL = "Cmd" if IS_MAC else "Ctrl"
 FULLSCREEN_KEYS = ("<Control-Command-f>", "<F11>") if IS_MAC else ("<F11>",)
 FULLSCREEN_LABEL = "Ctrl+Cmd+F" if IS_MAC else "F11"
 POLL_MS = 50
+TRANSCRIPT_PASTE_SHOWN = 300  # pasted lines shown in the panel (all of them go to the summary)
 TRANSCRIPT_SECONDS = 120
 SAMPLE = Selection(19, 23, 1, 1)
 
@@ -135,6 +136,10 @@ class OperatorWindow(object):
                           accelerator="%s+Shift+S" % MOD_LABEL)
         servm.add_command(label="Start a new sermon", command=self.new_sermon)
         servm.add_command(label="Open a previous sermon\u2026", command=self.open_previous_sermon)
+        servm.add_separator()
+        servm.add_command(label="Paste transcript", command=self.paste_transcript)
+        servm.add_command(label="Import transcript\u2026", command=self.import_transcript)
+        servm.add_command(label="Clear transcript", command=self.clear_transcript)
         menubar.add_cascade(label="Service", menu=servm)
         helpm = tk.Menu(menubar, tearoff=False)
         helpm.add_command(label="Keyboard shortcuts", command=self.show_shortcuts)
@@ -216,6 +221,12 @@ class OperatorWindow(object):
         main.add(right, weight=3)
 
         tframe = ttk.LabelFrame(left, text="TRANSCRIPT", padding=6)
+        tbar = ttk.Frame(tframe)
+        tbar.pack(side="bottom", fill="x", pady=(4, 0))
+        ttk.Button(tbar, text="Paste", command=self.paste_transcript, style="Small.TButton").pack(side="left")
+        ttk.Button(tbar, text="Import\u2026", command=self.import_transcript, style="Small.TButton").pack(
+            side="left", padx=4)
+        ttk.Button(tbar, text="Clear", command=self.clear_transcript, style="Small.TButton").pack(side="right")
         self.transcript = tk.Text(tframe, height=8, wrap="word", state="disabled", relief="flat", borderwidth=0,
                                   highlightthickness=0, padx=6, pady=4, font=("TkDefaultFont", 12))
         tscroll = ttk.Scrollbar(tframe, command=self.transcript.yview)
@@ -1280,7 +1291,110 @@ class OperatorWindow(object):
     def open_summary(self, sermon=None) -> None:
         from .summary import SermonLog
         from .ui_summary import SummaryWindow
-        SummaryWindow(self, sermon or self.sermon or SermonLog())
+        if sermon is None and self.sermon is None:
+            self.sermon = SermonLog()  # so a transcript pasted later reaches this window
+        self.summary_window = SummaryWindow(self, sermon or self.sermon)
+
+    def _summary_changed(self) -> None:
+        """Rebuild an open summary window that shows the current sermon."""
+        w = getattr(self, "summary_window", None)
+        if w is not None and w.log is self.sermon:
+            w.reload()
+
+    # -- transcript: clear, paste, import ------------------------------------------------
+    def clear_transcript(self, confirm: bool = True) -> None:
+        """Empty the transcript panel and the sermon record the summary is built from."""
+        has_text = bool(self.transcript.get("1.0", "end").strip()) or (
+            self.sermon is not None and not self.sermon.empty())
+        if not has_text:
+            self._status("The transcript is already empty")
+            return
+        if confirm and not messagebox.askyesno(
+                APP_NAME, "Clear the transcript?\n\nThis also removes it from the sermon summary.",
+                parent=self.root):
+            return
+        self._clear_partial()
+        self._insert_transcript(lambda t: t.delete("1.0", "end"))
+        self._transcript_lines = []
+        if self.sermon is not None:
+            self._delete_sermon_file(self.sermon)
+            self.sermon.clear()
+        self._summary_changed()
+        self._status("Transcript cleared")
+
+    def _delete_sermon_file(self, sermon) -> None:
+        path = os.path.join(paths.config_dir(), "sermons",
+                            time.strftime("%Y-%m-%d_%H%M", time.localtime(sermon.started)) + ".json")
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+    def paste_transcript(self) -> None:
+        try:
+            text = self.root.clipboard_get()
+        except tk.TclError:
+            text = ""
+        self.add_transcript_text(text, "the clipboard")
+
+    def import_transcript(self) -> None:
+        from tkinter import filedialog
+
+        from .summary import TRANSCRIPT_FILETYPES
+        path = filedialog.askopenfilename(parent=self.root, title="Import a transcript",
+                                          filetypes=TRANSCRIPT_FILETYPES)
+        if not path:
+            return
+        try:
+            if os.path.getsize(path) > 8 * 1024 * 1024:
+                raise ValueError("The file is too large for a transcript.")
+            with open(path, encoding="utf-8-sig") as f:
+                text = f.read()
+        except UnicodeDecodeError:
+            messagebox.showerror(APP_NAME, "That file is not plain text (UTF-8).", parent=self.root)
+            return
+        except (OSError, ValueError) as exc:
+            messagebox.showerror(APP_NAME, "That file could not be read:\n%s" % exc, parent=self.root)
+            return
+        self.add_transcript_text(text, os.path.basename(path))
+
+    def add_transcript_text(self, text: str, source: str, ask: bool = True) -> bool:
+        """Add a pasted or imported transcript to the current sermon. Only accepted
+        formats get in; anything else is refused with a message."""
+        from .summary import TRANSCRIPT_FORMATS, SermonLog, TranscriptError, parse_transcript, references_in
+        try:
+            lines = parse_transcript(text)
+        except TranscriptError as exc:
+            messagebox.showerror(APP_NAME, "The text from %s was not added.\n\n%s\n\nAccepted: %s." % (
+                source, exc, TRANSCRIPT_FORMATS), parent=self.root)
+            return False
+        if self.sermon is None:
+            self.sermon = SermonLog()
+        if ask and not self.sermon.empty():
+            answer = messagebox.askyesnocancel(
+                APP_NAME, "Add the %d lines to the current transcript?\n\nYes adds them at the end. No replaces "
+                "the current transcript." % len(lines), parent=self.root)
+            if answer is None:
+                return False
+            if answer is False:
+                self.clear_transcript(confirm=False)
+        refs = references_in(lines, self.bible.verse_count)
+        self.sermon.add_lines(lines, refs)
+        shown = lines[-TRANSCRIPT_PASTE_SHOWN:]
+
+        def f(t):
+            for secs, line in shown:
+                t.insert("end", time.strftime("%H:%M:%S ", time.localtime(self.sermon.started + secs)), "time")
+                t.insert("end", line + "\n")
+        self._clear_partial()
+        self._insert_transcript(f)
+        now = time.monotonic()
+        self._transcript_lines.extend([now] * len(shown))
+        self._save_sermon()
+        self._summary_changed()
+        self._status("Added %d transcript line%s and %d scripture reference%s from %s" % (
+            len(lines), "" if len(lines) == 1 else "s", len(refs), "" if len(refs) == 1 else "s", source))
+        return True
 
     def open_previous_sermon(self) -> None:
         import json as _json
